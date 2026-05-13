@@ -1,0 +1,12 @@
+build/
+install/
+log/
+
+__pycache__/
+*.py[cod]
+
+maps/active/*.db
+maps/active/*.db-*
+maps/sessions/**/*.db
+maps/sessions/**/*.db-*
+.omx/

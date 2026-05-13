@@ -1,0 +1,62 @@
+/**:
+  ros__parameters:
+    # Inputs
+    subscribe_scan_cloud: true
+    subscribe_scan: false
+    subscribe_depth: false
+    subscribe_rgb: false
+    subscribe_stereo: false
+    subscribe_rgbd: false
+    subscribe_user_data: false
+    subscribe_odom_info: false
+
+    # RTAB-Map should subscribe to /odom topic. Do not set odom_frame_id here.
+    frame_id: base_link
+    map_frame_id: map
+    publish_tf: true
+    odom_sensor_sync: true
+    wait_for_transform: 0.2
+
+    # RViz-friendly map publishing. rtabmap_viz can display internal MapData,
+    # while RViz sees these exported ROS topics.
+    map_always_update: true
+    map_filter_radius: 0.0
+    map_filter_angle: 0.0
+    cloud_output_voxelized: false
+
+    # Synchronize /odom (~150 Hz) and /scan_cloud (~14.7 Hz).
+    approx_sync: true
+    approx_sync_max_interval: 0.2
+    topic_queue_size: 20
+    sync_queue_size: 20
+
+    # Bridge outputs are RELIABLE.
+    qos_scan: 1
+    qos_odom: 1
+
+    # ICP-only LiDAR registration.
+    "Reg/Strategy": "1"
+    "Reg/Force3DoF": "true"
+    "Icp/PointToPlane": "true"
+    "Icp/VoxelSize": "0.1"
+    "Icp/Iterations": "10"
+    "Icp/MaxCorrespondenceDistance": "0.3"
+    "Icp/MaxTranslation": "0.5"
+
+    # Indoor map defaults.
+    "Grid/Sensor": "0"
+    "Grid/CellSize": "0.05"
+    "Grid/RangeMax": "10.0"
+    "Grid/RangeMin": "0.3"
+
+    # Loop closure / proximity defaults.
+    "Rtabmap/DetectionRate": "1"
+    # Odom-only baseline: Go2 /utlidar/robot_odom is already stable, so
+    # disable RTAB-Map ICP/proximity graph corrections that can add false links.
+    "RGBD/NeighborLinkRefining": "false"
+    "RGBD/OptimizeFromGraphEnd": "false"
+    "RGBD/ProximityBySpace": "false"
+    "RGBD/ProximityOdomGuess": "false"
+    "RGBD/ProximityMaxGraphDepth": "0"
+    "RGBD/ProximityPathMaxNeighbors": "0"
+    "Rtabmap/StartNewMapOnLoopClosure": "false"
