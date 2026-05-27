@@ -1,0 +1,113 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "Go2 RTAB-Map Control" [level=1] [ref=e5]
+      - paragraph [ref=e6]: Mapping, initial pose alignment, and tracking lock controls
+    - generic "System status" [ref=e7]:
+      - generic [ref=e10]: ROS ONLINE
+      - generic [ref=e13]: RTAB-MAP ALIVE
+      - generic [ref=e16]: ALIGN MODE
+  - generic [ref=e17]:
+    - complementary "Session context" [ref=e18]:
+      - heading "Session Context" [level=2] [ref=e19]
+      - generic [ref=e20]:
+        - paragraph [ref=e21]: CURRENT MODE
+        - paragraph [ref=e22]: ALIGNING
+        - paragraph [ref=e23]: Correction is enabled for initial alignment.
+      - generic [ref=e24]:
+        - paragraph [ref=e25]: ACTIVE DATABASE
+        - paragraph [ref=e26]: maps/active/rtabmap.db
+        - paragraph [ref=e27]: 227 nodes · active
+    - region "Controls" [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - generic [ref=e31]:
+            - generic [ref=e32]:
+              - heading "Mapping" [level=2] [ref=e33]
+              - paragraph [ref=e34]: Build or refresh RTAB-Map DB
+            - generic [ref=e37]: idle
+          - generic [ref=e38]:
+            - generic [ref=e39]:
+              - generic [ref=e40]: Session folder name
+              - textbox "Session folder name" [ref=e41]: odom_mapping
+            - paragraph [ref=e42]: maps/sessions/odom_mapping/rtabmap.db
+            - button "Open rtabmap_viz" [pressed] [ref=e43] [cursor=pointer]:
+              - generic [ref=e44]: Open rtabmap_viz
+          - generic [ref=e47]:
+            - button "Start Mapping" [ref=e48] [cursor=pointer]:
+              - img [ref=e49]
+              - generic [ref=e51]: Start Mapping
+            - button "Stop" [ref=e52] [cursor=pointer]:
+              - img [ref=e53]
+              - generic [ref=e55]: Stop
+        - generic [ref=e56]:
+          - generic [ref=e57]:
+            - generic [ref=e58]:
+              - heading "Localization" [level=2] [ref=e59]
+              - paragraph [ref=e60]: Start with pose preset
+            - generic [ref=e63]: ready
+          - generic [ref=e64]:
+            - paragraph [ref=e65]: Selected preset
+            - generic [ref=e66]:
+              - generic [ref=e67]:
+                - combobox "Selected pose preset" [ref=e68]:
+                  - option "mapping_start" [selected]
+                  - option "dock"
+                  - option "lab_entry"
+                - img
+              - generic [ref=e69]: yaw 164.5
+          - generic [ref=e70]:
+            - button "Start Localization + Send Pose" [ref=e71] [cursor=pointer]:
+              - img [ref=e72]
+              - generic [ref=e74]: Start Localization + Send Pose
+            - generic [ref=e75]:
+              - button "Send Pose" [ref=e76] [cursor=pointer]:
+                - img [ref=e77]
+                - generic [ref=e79]: Send Pose
+              - button "Stop" [ref=e80] [cursor=pointer]:
+                - img [ref=e81]
+                - generic [ref=e83]: Stop
+      - generic [ref=e84]:
+        - generic [ref=e85]:
+          - generic [ref=e86]:
+            - heading "Correction Control" [level=2] [ref=e87]
+            - paragraph [ref=e88]: Align or lock correction
+          - generic [ref=e91]: CORRECTION ENABLED
+        - generic [ref=e92]:
+          - button "Align Mode" [disabled] [ref=e93]:
+            - img [ref=e94]
+            - generic [ref=e96]: Align Mode
+          - button "Lock Tracking" [disabled] [ref=e97]:
+            - img [ref=e98]
+            - generic [ref=e100]: Lock Tracking
+      - generic [ref=e101]:
+        - generic [ref=e102]:
+          - heading "Operator Log" [level=2] [ref=e103]
+          - button "Clear" [ref=e104] [cursor=pointer]:
+            - img [ref=e105]
+            - generic [ref=e107]: Clear
+        - list [ref=e108]:
+          - listitem [ref=e109]: "16:06:12 Dashboard ready: static preview mode"
+          - listitem [ref=e110]: "16:06:12 Active DB loaded: maps/active/rtabmap.db"
+    - complementary "Live diagnostics" [ref=e111]:
+      - heading "Live Diagnostics" [level=2] [ref=e112]
+      - generic [ref=e113]:
+        - paragraph [ref=e114]: RTAB-MAP INFO
+        - generic [ref=e115]:
+          - generic [ref=e116]: proximity_id
+          - strong [ref=e117]: "55"
+        - generic [ref=e118]:
+          - generic [ref=e119]: loop_closure_id
+          - strong [ref=e120]: "0"
+        - generic [ref=e121]:
+          - generic [ref=e122]: correction
+          - strong [ref=e123]: enabled
+      - generic [ref=e124]:
+        - paragraph [ref=e125]: TF STATUS
+        - paragraph [ref=e126]: map->odom live
+        - paragraph [ref=e127]: last 0.2s ago
+      - generic [ref=e128]:
+        - paragraph [ref=e129]: POSE STREAM
+        - paragraph [ref=e130]:
+          - text: /rtabmap/localization_pose
+          - text: map frame · 1 Hz

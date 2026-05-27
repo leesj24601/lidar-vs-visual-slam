@@ -369,22 +369,26 @@ loop_closure_id = 0
 ```python
 'RGBD/ProximityBySpace': 'true',
 'RGBD/ProximityOdomGuess': 'true',
-'RGBD/ProximityPathMaxNeighbors': '5',
-'RGBD/ProximityGlobalScanMap': 'true',
+'RGBD/ProximityPathMaxNeighbors': '1',
+'RGBD/ProximityMaxGraphDepth': '10',
+'RGBD/ProximityGlobalScanMap': 'false',
 'RGBD/OptimizeMaxError': ParameterValue(
     LaunchConfiguration('optimize_max_error'),
     value_type=str,
-),  # default 30.0
-'RGBD/MaxOdomCacheSize': '0',
+),  # default 3.0
+'RGBD/MaxOdomCacheSize': '10',
+'Icp/CorrespondenceRatio': '0.3',
+'Icp/MaxTranslation': '0.25',
 ```
 
-`RGBD/OptimizeMaxError` 기본값 3.0에서 localization 후보가 graph consistency 검증으로 reject되는 경우가 있었다.
-`10.0`에서도 error ratio 10.6 수준 후보가 reject되었고, `20.0`에서도 yaw graph error ratio 21~24 수준 후보가 reject되어, initial pose 없이 global LiDAR relocalization을 실험하기 위해 `30.0`으로 완화했다.
-이 값은 틀린 후보를 accept할 위험이 있으므로 RViz에서 `/scan_cloud`가 `/rtabmap/map` 위에 맞는지 반드시 확인해야 한다.
-`RGBD/MaxOdomCacheSize=0`은 localization 후보가 odom cache/graph consistency 경로에서 계속 reject되는 상황을 줄이기 위한 실험값이다.
+`RGBD/OptimizeMaxError`는 틀린 후보를 accept할 위험을 줄이기 위해 기본값을 `3.0`으로 둔다.
+`Icp/CorrespondenceRatio=0.3`, `Icp/MaxTranslation=0.25`도 같은 목적의 guardrail이다.
+`RGBD/MaxOdomCacheSize=10`은 localization jump 검증을 유지하기 위한 기본값이다.
 RTAB-Map 내부 파라미터(`RGBD/...`, `Icp/...` 등)는 문자열 타입으로 선언되므로 launch override도 `ParameterValue(..., value_type=str)`로 넘겨야 한다.
 
-`30.0`에서도 error ratio 30~31 수준으로 reject되면 threshold를 계속 올리기보다 diagnostic으로 validation을 꺼서 후보 자체가 맞는지 확인한다.
+`optimize_max_error`를 크게 올리거나 `RGBD/ProximityGlobalScanMap=true`, `RGBD/MaxOdomCacheSize=0`으로 완화하는 것은 diagnostic에만 사용한다.
+이 조합은 initial pose 없이 global LiDAR relocalization 후보를 더 넓게 찾기 위한 실험에는 도움이 될 수 있지만,
+후속 false proximity match가 `map -> odom`을 틀어지게 만들 수 있다.
 
 ```bash
 ros2 launch go2_rtabmap_launch localization.launch.py \
@@ -410,7 +414,100 @@ ros2 topic echo /rtabmap/info --field loop_closure_id
 
 성공 기준은 pose 발행만이 아니다. RViz에서 `/scan_cloud`가 `/rtabmap/map` 위에 실제 위치와 맞게 겹쳐야 한다.
 
-## Issue 8: `rtabmap_viz`는 괜찮은데 RViz `/rtabmap/cloud_map`이 너무 성김
+## Issue 8: LiDAR-only localization이 한 번 잘못 붙으면 복구가 어려움
+
+### Symptom
+
+- 초기 `initial_pose`를 대략 맞추면 rtabmap_viz에서 노란 map과 분홍 current scan이 잘 겹친다.
+- 이후 이동 중 local/proximity match가 다른 저장 노드에 붙으면서 노란 map과 분홍 scan이 다시 어긋난다.
+- `/odom`과 `/scan_cloud` 주파수는 정상인데 `map -> odom` 보정값이 조금씩 바뀐다.
+- `/rtabmap/info`의 odom cache에 type 2 proximity/localization link가 저장 노드 59, 63, 134, 136처럼 위치는 비슷하지만 yaw가 다른 노드로 생긴다.
+
+### Root Cause
+
+현재 구성은 RTAB-Map LiDAR-only ICP/proximity localization이다.
+visual word, visual feature, global descriptor, Scan Context 같은 전역 place recognition 계층이 없다.
+
+따라서 동작은 대략 다음 흐름이다.
+
+```text
+현재 map->odom 기준 pose 추정
+-> 그 주변 저장 노드/로컬맵을 후보로 탐색
+-> ICP로 현재 scan과 후보 노드를 정합
+-> 통과하면 map->odom 보정
+```
+
+한 번 잘못된 노드에 붙으면 다음 탐색도 잘못된 `map -> odom` 기준 주변에서 시작한다.
+올바른 노드는 후보 범위 밖으로 밀리거나, 후보가 되더라도 기존 graph consistency와 충돌해 reject될 수 있다.
+RTAB-Map은 마지막 accepted correction을 자동으로 취소하지 않으므로, 더 좋은 새 correction이 accepted되지 않으면 틀어진 상태가 유지된다.
+
+특히 현재 active DB의 시작점 주변에는 위치는 비슷하지만 yaw가 크게 다른 노드들이 있다.
+
+```text
+55:  x=-0.183 y=0.151 yaw=154 deg
+59:  x=-0.291 y=0.169 yaw=95 deg
+61:  x=-0.326 y=0.174 yaw=-177 deg
+63:  x=-0.349 y=0.114 yaw=-122 deg
+134: x=-0.434 y=0.288 yaw=116 deg
+136: x=-0.210 y=0.219 yaw=96 deg
+```
+
+LiDAR-only ICP는 이런 근접/회전 노드들 사이에서 false local match를 만들 수 있다.
+
+### Fix Option A: ALIGN -> LOCK -> TRACKING
+
+known-start 운영을 목표로 한다.
+처음에는 `initial_pose`로 대략 위치를 주고 proximity/local match를 허용한다.
+rtabmap_viz/RViz에서 map과 scan이 맞는 것을 확인한 뒤 후속 proximity correction을 꺼서 `map -> odom`이 더 흔들리지 않게 한다.
+
+```bash
+ros2 param set /rtabmap/rtabmap RGBD/ProximityBySpace "'true'"
+ros2 service call /rtabmap/rtabmap/update_parameters std_srvs/srv/Empty {}
+```
+
+시작점 pose 예시:
+
+```bash
+ros2 launch go2_rtabmap_launch localization.launch.py \
+  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/active/rtabmap.db \
+  initial_pose:="-0.171703 0.161575 0 0 0 2.870674372" \
+  rtabmap_viz:=true
+```
+
+정렬이 맞으면 잠근다.
+
+```bash
+ros2 param set /rtabmap/rtabmap RGBD/ProximityBySpace "'false'"
+ros2 service call /rtabmap/rtabmap/update_parameters std_srvs/srv/Empty {}
+```
+
+이 방식은 initial pose가 틀린 만큼 계속 틀릴 수 있다.
+대신 한 번 맞은 뒤 잘못된 후속 proximity match가 pose를 흔드는 위험을 줄인다.
+
+### Fix Option B: Scan Context 기반 global relocalization 추가
+
+진짜 kidnapped/global relocalization을 목표로 한다.
+RTAB-Map ICP 앞단에 LiDAR place recognition 계층을 추가해 현재 scan을 저장 keyframe 전체와 비교한다.
+
+```text
+현재 scan
+-> Scan Context descriptor 생성
+-> 저장된 모든 keyframe descriptor에서 top-K 후보 검색
+-> 후보별 yaw/coarse pose 생성
+-> ICP/GICP로 metric 검증
+-> 통과한 후보만 /rtabmap/initialpose 또는 correction 후보로 주입
+```
+
+이 방식은 잘못된 `map -> odom` 주변만 탐색하지 않고, 현재 scan 자체를 DB 전체 keyframe과 비교할 수 있다.
+따라서 잘못 붙은 뒤에도 올바른 후보 노드로 돌아올 가능성을 만든다.
+
+### Portfolio Note
+
+두 해결을 모두 남기는 것이 좋다.
+Option A는 실기체에서 안정성을 확보한 실무적 판단을 보여주고,
+Option B는 LiDAR-only global relocalization을 위한 알고리즘적 개선을 보여준다.
+
+## Issue 9: `rtabmap_viz`는 괜찮은데 RViz `/rtabmap/cloud_map`이 너무 성김
 
 ### Symptom
 
