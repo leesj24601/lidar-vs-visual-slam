@@ -406,10 +406,13 @@ DeclareLaunchArgument('rtabmap_viz',
 - localization 전용 override:
   - `RGBD/ProximityBySpace=true`
   - `RGBD/ProximityOdomGuess=true`
-  - `RGBD/ProximityPathMaxNeighbors=5`
-  - `RGBD/ProximityGlobalScanMap=true`
-  - `RGBD/OptimizeMaxError`는 `optimize_max_error` launch 인자로 조정, 기본값 `30.0`
-  - `RGBD/MaxOdomCacheSize=0`
+  - `RGBD/ProximityPathMaxNeighbors=1`
+  - `RGBD/ProximityMaxGraphDepth=10`
+  - `RGBD/ProximityGlobalScanMap=false`
+  - `RGBD/OptimizeMaxError`는 `optimize_max_error` launch 인자로 조정, 기본값 `3.0`
+  - `RGBD/MaxOdomCacheSize=10`
+  - `Icp/CorrespondenceRatio=0.3`
+  - `Icp/MaxTranslation=0.25`
 - GUI는 기본 실행하지 않음. 필요 시 `rviz:=true` 또는 `rtabmap_viz:=true`
 - 초기 위치 차이가 큰 경우 `initial_pose` 적용 가능성 검토
 
@@ -438,6 +441,61 @@ DeclareLaunchArgument('rtabmap_viz',
 - `maps/active/rtabmap.db` 재사용 localization 성공
 - 실행/검증 절차가 `docs/RUNBOOK.md`에 반영됨
 
+### Phase 6: Known-start 로컬라이제이션 안정화
+
+**목표**: 현재 RTAB-Map LiDAR-only ICP 구성의 한계를 인정하고, 알려진 시작 위치에서 안정적으로 운용되는 `ALIGN -> LOCK -> TRACKING` 모드를 구현한다.
+
+- `localization.launch.py`에 운용 모드 인자 추가 검토
+  - `localization_mode:=align`: 초기 정렬을 위해 proximity/local match 허용
+  - `localization_mode:=tracking`: 정렬 완료 후 후속 proximity correction 비활성화
+  - 필요 시 `lock_after_init:=true`, `lock_delay_sec`, `lock_min_proximity_id` 같은 자동 잠금 인자 추가
+- 매핑 시작점, 도킹 위치, 실험실 입구 등 주요 시작 pose 목록을 문서화
+- 시작 pose를 DB 노드 pose에서 추출하는 유틸리티 또는 문서 절차 추가
+- 정렬 성공 기준 정의
+  - rtabmap_viz/RViz에서 `/scan_cloud`가 저장 map 위에 겹침
+  - `/rtabmap/info`의 `proximity_detection_id` 또는 type 2 link가 예상 저장 노드 근처로 발생
+  - `map -> odom`이 정렬 후 큰 폭으로 흔들리지 않음
+- 정렬 성공 후 `RGBD/ProximityBySpace=false`로 잠가 잘못된 후속 proximity match가 `map -> odom`을 흔들지 못하게 함
+- 틀어짐 감지 시 자동 복구를 기대하지 않고 `initial_pose` 재주입 절차를 제공
+
+**완료 기준**
+
+- 매핑 시작점 근처에서 `initial_pose` 주입 후 map/scan 정렬 성공
+- lock 이후 1~2m 저속 주행에서 map/scan 정렬 유지
+- lock 전후 `map -> odom`, `/rtabmap/info`, rtabmap_viz 캡처를 비교 자료로 저장
+- `docs/RUNBOOK.md`에 ALIGN, LOCK, TRACKING 명령과 판단 기준 반영
+
+### Phase 7: Scan Context 기반 global relocalization PoC
+
+**목표**: 초기 pose 의존도를 낮추기 위해 현재 scan을 저장 keyframe 전체와 비교하는 LiDAR place recognition 계층을 추가한다.
+
+- Scan Context 또는 호환 LiDAR global descriptor 구현/연동 방식 결정
+  - ROS2 Python/C++ 노드 직접 구현
+  - 기존 C++ Scan Context 구현을 래핑
+  - 오프라인 DB 생성기와 온라인 query 노드 분리
+- 매핑/DB 생성 단계
+  - `/scan_cloud`와 `/odom` 또는 RTAB-Map DB 노드 pose를 이용해 keyframe descriptor 저장
+  - 각 descriptor에 node id, timestamp, map pose, yaw 후보 정보를 함께 저장
+- 로컬라이제이션 query 단계
+  - 현재 `/scan_cloud`로 descriptor 생성
+  - 저장 descriptor 전체에서 top-K 후보 검색
+  - 후보별 yaw/coarse pose 생성
+  - ICP/GICP로 metric 정합 검증
+  - 통과한 후보만 `/rtabmap/initialpose`로 주입하거나 별도 correction 후보로 사용
+- 평가
+  - RTAB-Map proximity only
+  - Phase 6 ALIGN-LOCK-TRACKING
+  - Scan Context + ICP 후보 주입
+  세 모드를 같은 DB/시작 위치에서 비교
+
+**완료 기준**
+
+- 저장 DB에서 Scan Context descriptor index 생성
+- 현재 scan query로 top-K 후보와 yaw 후보 출력
+- 후보 pose 주입 후 RTAB-Map이 map/scan 정렬 성공
+- 잘못된 시작 위치 또는 방향에서 Phase 6 대비 relocalization 성공률 개선 확인
+- 실패 케이스와 false positive reject 기준을 문서화
+
 ---
 
 ## 확인 필요 사항
@@ -449,4 +507,8 @@ DeclareLaunchArgument('rtabmap_viz',
 - [x] localization 모드에서 기존 DB 로드 및 `/rtabmap/localization_pose` 발행 확인
 - [ ] odom-only baseline(`NeighborLinkRefining=false`, `ProximityBySpace=false`) 후 맵 품질 재검증
 - [ ] Nav2용 2D map 튜닝은 3D cloud map 품질과 분리해 별도 실험으로 재검토
-- [ ] localization 모드 시작 위치가 매핑 시작점과 크게 다를 경우 initial_pose 파라미터 설정 필요 여부
+- [x] localization 모드 시작 위치가 매핑 시작점과 크게 다를 경우 initial_pose 파라미터 설정 필요 여부
+- [ ] Phase 6 `ALIGN -> LOCK -> TRACKING` 운용 모드 launch/API 설계
+- [ ] Phase 6에서 lock 이후 후속 proximity correction이 꺼졌을 때 주행 안정성 검증
+- [ ] Phase 7 Scan Context descriptor index 파일 형식 결정
+- [ ] Phase 7 top-K 후보 검색 및 ICP/GICP 검증 PoC 구현

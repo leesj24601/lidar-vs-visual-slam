@@ -1,0 +1,1573 @@
+{
+  "version": "2.11",
+  "children": [
+    {
+      "type": "frame",
+      "id": "UPHZe",
+      "x": 0,
+      "y": 0,
+      "name": "Go2 RTAB-Map Control Dashboard",
+      "width": 1280,
+      "height": 820,
+      "fill": "$surface",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "plkpq",
+          "name": "Header",
+          "width": "fill_container",
+          "height": 92,
+          "fill": "$inverse",
+          "padding": [
+            20,
+            28
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "u86Ms",
+              "name": "Header Left",
+              "layout": "vertical",
+              "gap": 6,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "rmpO0",
+                  "name": "title",
+                  "fill": "$panel",
+                  "content": "Go2 RTAB-Map Control",
+                  "fontFamily": "$fontBody",
+                  "fontSize": 26,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "text",
+                  "id": "o9Kq2Q",
+                  "name": "subtitle",
+                  "fill": "#B7C0CE",
+                  "content": "Mapping, initial pose alignment, and tracking lock controls",
+                  "fontFamily": "$fontBody",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "k5gQ0c",
+              "name": "Header Status",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "pguW0",
+                  "name": "Status Chip ROS",
+                  "fill": "#123D2C",
+                  "cornerRadius": 999,
+                  "gap": 8,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "OMZmZ",
+                      "name": "dot1",
+                      "fill": "$success",
+                      "width": 8,
+                      "height": 8
+                    },
+                    {
+                      "type": "text",
+                      "id": "vvqwA",
+                      "name": "chipText1",
+                      "fill": "$panel",
+                      "content": "ROS ONLINE",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "S5rVWM",
+                  "name": "Status Chip RTAB",
+                  "fill": "#17345D",
+                  "cornerRadius": 999,
+                  "gap": 8,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "DJPsl",
+                      "name": "dot2",
+                      "fill": "$accent",
+                      "width": 8,
+                      "height": 8
+                    },
+                    {
+                      "type": "text",
+                      "id": "sPxe5",
+                      "name": "chipText2",
+                      "fill": "$panel",
+                      "content": "RTAB-MAP ALIVE",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "oSmIF",
+                  "name": "Status Chip Lock",
+                  "fill": "#4B3717",
+                  "cornerRadius": 999,
+                  "gap": 8,
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "QV7EM",
+                      "name": "dot3",
+                      "fill": "$warning",
+                      "width": 8,
+                      "height": 8
+                    },
+                    {
+                      "type": "text",
+                      "id": "mlaeS",
+                      "name": "chipText3",
+                      "fill": "$panel",
+                      "content": "ALIGN MODE",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "AHuZ7",
+          "name": "Dashboard Body",
+          "width": "fill_container",
+          "height": "fill_container",
+          "gap": 18,
+          "padding": 20,
+          "children": [
+            {
+              "type": "frame",
+              "id": "SO7HY",
+              "name": "Left Rail - Context",
+              "width": 280,
+              "fill": "$panel",
+              "cornerRadius": 8,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$border"
+              },
+              "layout": "vertical",
+              "gap": 16,
+              "padding": 18,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "n4Zn2",
+                  "name": "railTitle",
+                  "fill": "$text",
+                  "content": "Session Context",
+                  "fontFamily": "$fontBody",
+                  "fontSize": 18,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "frame",
+                  "id": "x11zE",
+                  "name": "Current Mode Box",
+                  "width": "fill_container",
+                  "fill": "$inkSoft",
+                  "cornerRadius": 8,
+                  "layout": "vertical",
+                  "gap": 8,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "PKw6h",
+                      "name": "modeLabel",
+                      "fill": "$muted",
+                      "content": "CURRENT MODE",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "N1xlO6",
+                      "name": "modeValue",
+                      "fill": "$text",
+                      "content": "ALIGNING",
+                      "fontFamily": "$fontBody",
+                      "fontSize": 24,
+                      "fontWeight": "800"
+                    },
+                    {
+                      "type": "text",
+                      "id": "g8mZQ",
+                      "name": "modeDesc",
+                      "fill": "$muted",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Correction is enabled for initial alignment.",
+                      "lineHeight": 1.35,
+                      "fontFamily": "$fontBody",
+                      "fontSize": 12,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pLNhf",
+                  "name": "Active DB Box",
+                  "width": "fill_container",
+                  "fill": "$panel",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$border"
+                  },
+                  "layout": "vertical",
+                  "gap": 6,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "GHsDG",
+                      "name": "dbLabel",
+                      "fill": "$muted",
+                      "content": "ACTIVE DATABASE",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "bDBlE",
+                      "name": "dbPath",
+                      "fill": "$text",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "maps/active/rtabmap.db",
+                      "lineHeight": 1.3,
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "g5W3s",
+                      "name": "dbMeta",
+                      "fill": "$muted",
+                      "content": "227 nodes · active",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "smwLt",
+              "name": "Main Controls",
+              "width": "fill_container",
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "IshFV",
+                  "name": "Primary Control Row",
+                  "width": "fill_container",
+                  "height": 322,
+                  "gap": 18,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "M3hUZK",
+                      "name": "Mapping Panel",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$panel",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$border"
+                      },
+                      "layout": "vertical",
+                      "gap": 16,
+                      "padding": 18,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "TmMKz",
+                          "name": "mapHead",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "PF5wn",
+                              "name": "mapTitleGroup",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "Wwao9",
+                                  "name": "mapTitle",
+                                  "fill": "$text",
+                                  "content": "Mapping",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 20,
+                                  "fontWeight": "800"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "xK4cW",
+                                  "name": "mapSub",
+                                  "fill": "$muted",
+                                  "content": "Build or refresh RTAB-Map DB",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ahh5T",
+                              "name": "mapBadge",
+                              "height": 28,
+                              "fill": "#E9F2FF",
+                              "cornerRadius": 999,
+                              "gap": 6,
+                              "padding": [
+                                6,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "ellipse",
+                                  "id": "XOY11",
+                                  "name": "mapBadgeDot",
+                                  "fill": "$accent",
+                                  "width": 7,
+                                  "height": 7
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "zO5sg",
+                                  "name": "mapBadgeText",
+                                  "fill": "$accent",
+                                  "content": "idle",
+                                  "fontFamily": "$fontMono",
+                                  "fontSize": 11,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Sth9S",
+                          "name": "mapOptions",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "KWCvh",
+                              "name": "mapOpt1",
+                              "width": "fill_container",
+                              "height": 42,
+                              "fill": "$inkSoft",
+                              "cornerRadius": 6,
+                              "padding": [
+                                0,
+                                12
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "FWPkg",
+                                  "name": "mapOpt1Text",
+                                  "fill": "$text",
+                                  "content": "Reset DB before mapping",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "G2rRs",
+                                  "name": "mapOpt1Toggle",
+                                  "width": 42,
+                                  "height": 24,
+                                  "fill": "$border",
+                                  "cornerRadius": 999,
+                                  "layout": "none",
+                                  "children": [
+                                    {
+                                      "type": "ellipse",
+                                      "id": "HgBeN",
+                                      "x": 3,
+                                      "y": 3,
+                                      "name": "mapOpt1Knob",
+                                      "fill": "$panel",
+                                      "width": 18,
+                                      "height": 18
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "VlTm5",
+                              "name": "mapOpt2",
+                              "width": "fill_container",
+                              "height": 42,
+                              "fill": "$inkSoft",
+                              "cornerRadius": 6,
+                              "padding": [
+                                0,
+                                12
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "UKC9s",
+                                  "name": "mapOpt2Text",
+                                  "fill": "$text",
+                                  "content": "Open rtabmap_viz",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 13,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "lXDvL",
+                                  "name": "mapOpt2Toggle",
+                                  "width": 42,
+                                  "height": 24,
+                                  "fill": "$accent",
+                                  "cornerRadius": 999,
+                                  "layout": "none",
+                                  "children": [
+                                    {
+                                      "type": "ellipse",
+                                      "id": "jjakb",
+                                      "x": 21,
+                                      "y": 3,
+                                      "name": "mapOpt2Knob",
+                                      "fill": "$panel",
+                                      "width": 18,
+                                      "height": 18
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "LAsf1",
+                          "name": "mapButtons",
+                          "width": "fill_container",
+                          "height": 48,
+                          "gap": 10,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "m05mSS",
+                              "name": "mapStart",
+                              "width": "fill_container",
+                              "height": "fill_container",
+                              "fill": "$accent",
+                              "cornerRadius": 6,
+                              "gap": 8,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon_font",
+                                  "id": "c8LgoQ",
+                                  "name": "mapStartIcon",
+                                  "width": 18,
+                                  "height": 18,
+                                  "iconFontName": "play",
+                                  "iconFontFamily": "lucide",
+                                  "fill": "$panel"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "V5Jo5G",
+                                  "name": "mapStartText",
+                                  "fill": "$panel",
+                                  "content": "Start Mapping",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 14,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "g0FDOa",
+                              "name": "mapStop",
+                              "width": 92,
+                              "height": "fill_container",
+                              "fill": "$panel",
+                              "cornerRadius": 6,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "$border"
+                              },
+                              "gap": 8,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon_font",
+                                  "id": "RMKVv",
+                                  "name": "mapStopIcon",
+                                  "width": 14,
+                                  "height": 14,
+                                  "iconFontName": "square",
+                                  "iconFontFamily": "lucide",
+                                  "fill": "$muted"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "oL4Pu",
+                                  "name": "mapStopText",
+                                  "fill": "$text",
+                                  "content": "Stop",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 13,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "M3uM2",
+                      "name": "Localization Panel",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$panel",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$border"
+                      },
+                      "layout": "vertical",
+                      "gap": 16,
+                      "padding": 18,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "zbW0A",
+                          "name": "locHead",
+                          "width": "fill_container",
+                          "justifyContent": "space_between",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "OKQxK",
+                              "name": "locTitleGroup",
+                              "layout": "vertical",
+                              "gap": 4,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "gCjQ0",
+                                  "name": "locTitle",
+                                  "fill": "$text",
+                                  "content": "Localization",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 20,
+                                  "fontWeight": "800"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "NBN3R",
+                                  "name": "locSub",
+                                  "fill": "$muted",
+                                  "content": "Start with pose preset",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "NBz4U",
+                              "name": "locBadge",
+                              "height": 28,
+                              "fill": "#FFF4E5",
+                              "cornerRadius": 999,
+                              "gap": 6,
+                              "padding": [
+                                6,
+                                10
+                              ],
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "ellipse",
+                                  "id": "pJaGT",
+                                  "name": "locBadgeDot",
+                                  "fill": "$warning",
+                                  "width": 7,
+                                  "height": 7
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "vJVv8",
+                                  "name": "locBadgeText",
+                                  "fill": "$warning",
+                                  "content": "ready",
+                                  "fontFamily": "$fontMono",
+                                  "fontSize": 11,
+                                  "fontWeight": "600"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "EyDvB",
+                          "name": "locPose",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 8,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "z84b3N",
+                              "name": "locPoseLabel",
+                              "fill": "$muted",
+                              "content": "Selected preset",
+                              "fontFamily": "$fontMono",
+                              "fontSize": 11,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "frame",
+                              "id": "e8TSn",
+                              "name": "locPoseBox",
+                              "width": "fill_container",
+                              "height": 44,
+                              "fill": "$inkSoft",
+                              "cornerRadius": 6,
+                              "padding": [
+                                0,
+                                12
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "LzqJw",
+                                  "name": "locPoseName",
+                                  "fill": "$text",
+                                  "content": "mapping_start",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 14,
+                                  "fontWeight": "700"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "oKqiT",
+                                  "name": "locPoseValue",
+                                  "fill": "$muted",
+                                  "content": "yaw 164.5°",
+                                  "fontFamily": "$fontMono",
+                                  "fontSize": 12,
+                                  "fontWeight": "normal"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Q2OOc",
+                          "name": "locPrimary",
+                          "width": "fill_container",
+                          "layout": "vertical",
+                          "gap": 10,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "B1QH5H",
+                              "name": "locStart",
+                              "width": "fill_container",
+                              "height": 48,
+                              "fill": "$accent",
+                              "cornerRadius": 6,
+                              "gap": 8,
+                              "justifyContent": "center",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "icon_font",
+                                  "id": "xEPnw",
+                                  "name": "locStartIcon",
+                                  "width": 18,
+                                  "height": 18,
+                                  "iconFontName": "crosshair",
+                                  "iconFontFamily": "lucide",
+                                  "fill": "$panel"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "UikSN",
+                                  "name": "locStartText",
+                                  "fill": "$panel",
+                                  "content": "Start Localization + Send Pose",
+                                  "fontFamily": "$fontBody",
+                                  "fontSize": 14,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "gTImV",
+                              "name": "locSecondaryRow",
+                              "width": "fill_container",
+                              "height": 44,
+                              "gap": 10,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "XBBLc",
+                                  "name": "locSend",
+                                  "width": "fill_container",
+                                  "height": "fill_container",
+                                  "fill": "$panel",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "thickness": 1,
+                                    "fill": "$border"
+                                  },
+                                  "gap": 8,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "V4ZtS",
+                                      "name": "locSendIcon",
+                                      "width": 16,
+                                      "height": 16,
+                                      "iconFontName": "send",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "$accent"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "j7qppe",
+                                      "name": "locSendText",
+                                      "fill": "$text",
+                                      "content": "Send Pose",
+                                      "fontFamily": "$fontBody",
+                                      "fontSize": 13,
+                                      "fontWeight": "700"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "WcJyp",
+                                  "name": "locStop",
+                                  "width": 130,
+                                  "height": "fill_container",
+                                  "fill": "$panel",
+                                  "cornerRadius": 6,
+                                  "stroke": {
+                                    "thickness": 1,
+                                    "fill": "$border"
+                                  },
+                                  "gap": 8,
+                                  "justifyContent": "center",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "dC4nz",
+                                      "name": "locStopIcon",
+                                      "width": 16,
+                                      "height": 16,
+                                      "iconFontName": "square",
+                                      "iconFontFamily": "lucide",
+                                      "fill": "$muted"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "POYOB",
+                                      "name": "locStopText",
+                                      "fill": "$text",
+                                      "content": "Stop",
+                                      "fontFamily": "$fontBody",
+                                      "fontSize": 13,
+                                      "fontWeight": "700"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "M1HT6",
+                  "name": "Correction Lock Panel",
+                  "width": "fill_container",
+                  "height": 186,
+                  "fill": "$panel",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$border"
+                  },
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": 18,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "dCEca",
+                      "name": "corrHead",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "g7p0b",
+                          "name": "corrTitleGroup",
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "kpuTe",
+                              "name": "corrTitle",
+                              "fill": "$text",
+                              "content": "Correction Control",
+                              "fontFamily": "$fontBody",
+                              "fontSize": 20,
+                              "fontWeight": "800"
+                            },
+                            {
+                              "type": "text",
+                              "id": "LQqPY",
+                              "name": "corrSub",
+                              "fill": "$muted",
+                              "content": "Align, lock, or unlock correction",
+                              "fontFamily": "$fontBody",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "Q4YGv",
+                          "name": "corrState",
+                          "height": 30,
+                          "fill": "#FFF4E5",
+                          "cornerRadius": 999,
+                          "gap": 8,
+                          "padding": [
+                            7,
+                            12
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "QMnYt",
+                              "name": "corrStateDot",
+                              "fill": "$warning",
+                              "width": 8,
+                              "height": 8
+                            },
+                            {
+                              "type": "text",
+                              "id": "O4qYF",
+                              "name": "corrStateText",
+                              "fill": "$warning",
+                              "content": "CORRECTION ENABLED",
+                              "fontFamily": "$fontMono",
+                              "fontSize": 11,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "WYnTr",
+                      "name": "corrActions",
+                      "width": "fill_container",
+                      "height": 74,
+                      "gap": 12,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "WTYQL",
+                          "name": "alignBtn",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "fill": "#FFF4E5",
+                          "cornerRadius": 8,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#FEDF89"
+                          },
+                          "layout": "vertical",
+                          "gap": 5,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "gONRL",
+                              "name": "alignIcon",
+                              "width": 20,
+                              "height": 20,
+                              "iconFontName": "radar",
+                              "iconFontFamily": "lucide",
+                              "fill": "$warning"
+                            },
+                            {
+                              "type": "text",
+                              "id": "x39zS",
+                              "name": "alignText",
+                              "fill": "$text",
+                              "content": "Align Mode",
+                              "fontFamily": "$fontBody",
+                              "fontSize": 14,
+                              "fontWeight": "800"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "FLh6e",
+                          "name": "lockBtn",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "fill": "$success",
+                          "cornerRadius": 8,
+                          "layout": "vertical",
+                          "gap": 5,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "hgtlG",
+                              "name": "lockIcon",
+                              "width": 20,
+                              "height": 20,
+                              "iconFontName": "lock",
+                              "iconFontFamily": "lucide",
+                              "fill": "$panel"
+                            },
+                            {
+                              "type": "text",
+                              "id": "aH0vC",
+                              "name": "lockText",
+                              "fill": "$panel",
+                              "content": "Lock Tracking",
+                              "fontFamily": "$fontBody",
+                              "fontSize": 14,
+                              "fontWeight": "800"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "URdF6",
+                          "name": "unlockBtn",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "fill": "$panel",
+                          "cornerRadius": 8,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "$border"
+                          },
+                          "layout": "vertical",
+                          "gap": 5,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "aAfV3",
+                              "name": "unlockIcon",
+                              "width": 20,
+                              "height": 20,
+                              "iconFontName": "lock-open",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted"
+                            },
+                            {
+                              "type": "text",
+                              "id": "gmxOa",
+                              "name": "unlockText",
+                              "fill": "$text",
+                              "content": "Unlock",
+                              "fontFamily": "$fontBody",
+                              "fontSize": 14,
+                              "fontWeight": "800"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DQdYK",
+                  "name": "Operator Log",
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$panel",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$border"
+                  },
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": 18,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "GgJ7C",
+                      "name": "logHead",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vnhPI",
+                          "name": "logTitle",
+                          "fill": "$text",
+                          "content": "Operator Log",
+                          "fontFamily": "$fontBody",
+                          "fontSize": 18,
+                          "fontWeight": "800"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "rU1KE",
+                          "name": "clearLog",
+                          "height": 32,
+                          "fill": "$panel",
+                          "cornerRadius": 6,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "$border"
+                          },
+                          "gap": 6,
+                          "padding": [
+                            6,
+                            10
+                          ],
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "c2vxLw",
+                              "name": "clearIcon",
+                              "width": 14,
+                              "height": 14,
+                              "iconFontName": "trash-2",
+                              "iconFontFamily": "lucide",
+                              "fill": "$muted"
+                            },
+                            {
+                              "type": "text",
+                              "id": "ixpI2",
+                              "name": "clearText",
+                              "fill": "$muted",
+                              "content": "Clear",
+                              "fontFamily": "$fontBody",
+                              "fontSize": 12,
+                              "fontWeight": "700"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "C5nxN",
+                      "name": "logFeed",
+                      "clip": true,
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "#0F172A",
+                      "cornerRadius": 8,
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 12,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Zhm5r",
+                          "name": "logLine1",
+                          "fill": "#D6E4FF",
+                          "content": "14:22:31  Active DB loaded: maps/active/rtabmap.db",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "XjfXr",
+                          "name": "logLine2",
+                          "fill": "#D6E4FF",
+                          "content": "14:22:41  Sent initial pose: mapping_start",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "DHocM",
+              "name": "Right Rail - Diagnostics",
+              "width": 330,
+              "fill": "$panel",
+              "cornerRadius": 8,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$border"
+              },
+              "layout": "vertical",
+              "gap": 16,
+              "padding": 18,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "xBovb",
+                  "name": "diagTitle",
+                  "fill": "$text",
+                  "content": "Live Diagnostics",
+                  "fontFamily": "$fontBody",
+                  "fontSize": 18,
+                  "fontWeight": "800"
+                },
+                {
+                  "type": "frame",
+                  "id": "d7N9Y",
+                  "name": "Topic Rates",
+                  "width": "fill_container",
+                  "fill": "$inkSoft",
+                  "cornerRadius": 8,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "NFJ19",
+                      "name": "topicLabel",
+                      "fill": "$muted",
+                      "content": "TOPIC RATES",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "wSa6v",
+                      "name": "topicRow1",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "IJYLE",
+                          "name": "topicName1",
+                          "fill": "$text",
+                          "content": "/odom",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "gCQbi",
+                          "name": "topicVal1",
+                          "fill": "$success",
+                          "content": "150 Hz",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "a43jA",
+                      "name": "topicRow2",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "dsUtY",
+                          "name": "topicName2",
+                          "fill": "$text",
+                          "content": "/scan_cloud",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "EkpeG",
+                          "name": "topicVal2",
+                          "fill": "$success",
+                          "content": "14.8 Hz",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "iyoAs",
+                  "name": "RTAB Info",
+                  "width": "fill_container",
+                  "fill": "$panel",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$border"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "BYeUd",
+                      "name": "rtabLabel",
+                      "fill": "$muted",
+                      "content": "RTAB-MAP INFO",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Ycxah",
+                      "name": "rtabRow1",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "iG3Wz",
+                          "name": "rtabName1",
+                          "fill": "$muted",
+                          "content": "proximity_id",
+                          "fontFamily": "$fontBody",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "U4M4dc",
+                          "name": "rtabVal1",
+                          "fill": "$text",
+                          "content": "55",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "SVSzb",
+                      "name": "rtabRow2",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "rYkLD",
+                          "name": "rtabName2",
+                          "fill": "$muted",
+                          "content": "loop_closure_id",
+                          "fontFamily": "$fontBody",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "R7Hng",
+                          "name": "rtabVal2",
+                          "fill": "$text",
+                          "content": "0",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "J7FF9m",
+                      "name": "rtabRow3",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Gb2kU",
+                          "name": "rtabName3",
+                          "fill": "$muted",
+                          "content": "correction",
+                          "fontFamily": "$fontBody",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "JveZT",
+                          "name": "rtabVal3",
+                          "fill": "$warning",
+                          "content": "enabled",
+                          "fontFamily": "$fontMono",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "joyVJ",
+                  "name": "Map To Odom",
+                  "width": "fill_container",
+                  "fill": "$panel",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$border"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "IOhEt",
+                      "name": "tfLabel",
+                      "fill": "$muted",
+                      "content": "TF STATUS",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "NyOPE",
+                      "name": "tfVal",
+                      "fill": "$text",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "map->odom stable",
+                      "lineHeight": 1.2,
+                      "fontFamily": "$fontMono",
+                      "fontSize": 15,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "ZsD8u",
+                  "name": "Localization Pose",
+                  "width": "fill_container",
+                  "fill": "$panel",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$border"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 14,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "fZBvC",
+                      "name": "poseDiagLabel",
+                      "fill": "$muted",
+                      "content": "POSE STREAM",
+                      "fontFamily": "$fontMono",
+                      "fontSize": 11,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "A7EDX",
+                      "name": "poseDiagValue",
+                      "fill": "$text",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "/rtabmap/localization_pose\nmap frame · 1 Hz",
+                      "lineHeight": 1.3,
+                      "fontFamily": "$fontMono",
+                      "fontSize": 13,
+                      "fontWeight": "700"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "accent": {
+      "type": "color",
+      "value": "#2F80ED"
+    },
+    "border": {
+      "type": "color",
+      "value": "#D9DEE7"
+    },
+    "danger": {
+      "type": "color",
+      "value": "#D92D20"
+    },
+    "fontBody": {
+      "type": "string",
+      "value": "Inter"
+    },
+    "fontMono": {
+      "type": "string",
+      "value": "IBM Plex Mono"
+    },
+    "inkSoft": {
+      "type": "color",
+      "value": "#EEF2F6"
+    },
+    "inverse": {
+      "type": "color",
+      "value": "#0A0A0A"
+    },
+    "muted": {
+      "type": "color",
+      "value": "#667085"
+    },
+    "panel": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "success": {
+      "type": "color",
+      "value": "#12B76A"
+    },
+    "surface": {
+      "type": "color",
+      "value": "#F4F6F8"
+    },
+    "text": {
+      "type": "color",
+      "value": "#1A1A1A"
+    },
+    "warning": {
+      "type": "color",
+      "value": "#F79009"
+    }
+  }
+}

@@ -56,7 +56,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'optimize_max_error',
-            default_value='30.0',
+            default_value='3.0',
             description=(
                 'RTAB-Map RGBD/OptimizeMaxError for localization validation. '
                 'Use 0 only as a diagnostic to disable rejection.'
@@ -112,14 +112,21 @@ def generate_launch_description():
                     'Mem/IncrementalMemory': 'false',
                     'Mem/InitWMWithAllNodes': 'true',
                     'RGBD/ProximityBySpace': 'true',
-                    'RGBD/ProximityOdomGuess': 'true',
-                    'RGBD/ProximityPathMaxNeighbors': '5',
-                    'RGBD/ProximityGlobalScanMap': 'true',
+                    'RGBD/ProximityOdomGuess': 'false',
+                    'RGBD/ProximityPathMaxNeighbors': '1',
+                    'RGBD/ProximityMaxGraphDepth': '0',
+                    'RGBD/ProximityGlobalScanMap': 'false',
                     'RGBD/OptimizeMaxError': ParameterValue(
                         optimize_max_error,
                         value_type=str,
                     ),
-                    'RGBD/MaxOdomCacheSize': '0',
+                    'RGBD/MaxOdomCacheSize': '10',
+                    'RGBD/AngularUpdate': '0.05',
+                    'RGBD/LinearUpdate': '0.05',
+                    'Icp/CorrespondenceRatio': '0.2',
+                    'Icp/MaxCorrespondenceDistance': '1.0',
+                    'Icp/OutlierRatio': '0.7',
+                    'Icp/MaxTranslation': '3.0',
                 },
             ],
             remappings=[
