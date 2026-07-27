@@ -25,10 +25,11 @@
     cloud_output_voxelized: false
 
     # Synchronize /odom (~150 Hz) and /scan_cloud (~14.7 Hz).
+    # Match the visual SLAM tolerance so cloud/odom pairing does not smear walls.
     approx_sync: true
-    approx_sync_max_interval: 0.2
-    topic_queue_size: 20
-    sync_queue_size: 20
+    approx_sync_max_interval: 0.03
+    topic_queue_size: 100
+    sync_queue_size: 100
 
     # Bridge outputs are RELIABLE.
     qos_scan: 1
@@ -36,10 +37,12 @@
 
     # ICP-only LiDAR registration.
     "Reg/Strategy": "1"
-    "Reg/Force3DoF": "true"
+    # Keep LiDAR mapping 6DoF-consistent with Go2 odometry and deskewed L1 clouds.
+    # The bridge removes /utlidar/cloud_deskewed zero padding before RTAB-Map.
+    "Reg/Force3DoF": "false"
     "Icp/PointToPlane": "true"
-    "Icp/VoxelSize": "0.1"
-    "Icp/Iterations": "10"
+    "Icp/VoxelSize": "0.05"
+    "Icp/Iterations": "20"
     "Icp/MaxCorrespondenceDistance": "0.3"
     "Icp/MaxTranslation": "0.5"
 
@@ -50,7 +53,11 @@
     "Grid/RangeMin": "0.3"
 
     # Loop closure / proximity defaults.
-    "Rtabmap/DetectionRate": "1"
+    # Denser LiDAR map experiment: process scans more often and create nodes
+    # with smaller motion deltas than the RTAB-Map defaults.
+    "Rtabmap/DetectionRate": "5"
+    "RGBD/LinearUpdate": "0.05"
+    "RGBD/AngularUpdate": "0.05"
     # Odom-only baseline: Go2 /utlidar/robot_odom is already stable, so
     # disable RTAB-Map ICP/proximity graph corrections that can add false links.
     "RGBD/NeighborLinkRefining": "false"

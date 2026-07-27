@@ -173,25 +173,28 @@ subscribe_rgb: false
 subscribe_depth: false
 subscribe_scan_cloud: false
 approx_sync: true
-approx_sync_max_interval: 0.1
+approx_sync_max_interval: 0.03
 odom_sensor_sync: true
 qos_image: 1
 qos_camera_info: 1
 qos_odom: 1
 Reg/Strategy: '0'
-Reg/Force3DoF: 'true'
-Vis/EstimationType: '2'
+Reg/Force3DoF: 'false'
+Kp/DetectorStrategy: '8'
+Vis/FeatureType: '8'
+Vis/EstimationType: '1'
 Vis/MinInliers: '20'
 Grid/FromDepth: 'true'
 Grid/RangeMin: '0.3'
-Grid/RangeMax: '4.0'
+Grid/RangeMax: '3.0'
+Grid/DepthDecimation: '2'
 Grid/CellSize: '0.05'
 RGBD/CreateOccupancyGrid: 'true'
 RGBD/OptimizeFromGraphEnd: 'false'
-RGBD/NeighborLinkRefining: 'false'
-RGBD/ProximityBySpace: 'false'
+RGBD/NeighborLinkRefining: 'true'
+RGBD/ProximityBySpace: 'true'
 RGBD/ProximityOdomGuess: 'false'
-Rtabmap/DetectionRate: '1.0'
+Rtabmap/DetectionRate: '8.0'
 RGBD/LinearUpdate: '0.1'
 RGBD/AngularUpdate: '0.1'
 ```
@@ -199,10 +202,13 @@ RGBD/AngularUpdate: '0.1'
 **설정 의도**
 
 - `Reg/Strategy: 0`: Visual feature 기반 registration 사용
-- `Reg/Force3DoF: true`: Go2 실내 평면 주행 기준으로 roll/pitch/z 자유도 억제
+- `Reg/Force3DoF: false`: RGB-D registration의 6DoF 자세를 유지
+- `Kp/DetectorStrategy: 8`, `Vis/FeatureType: 8`: build별 기본값 차이를 피하도록 GFTT/ORB를 명시적으로 고정
+- `Vis/EstimationType: 1`: metric depth를 이용하는 3D→2D PnP로 link transform 계산
 - `Grid/FromDepth: true`: RGB-D depth에서 occupancy grid 생성
-- `DetectionRate: 1.0`: 첫 매핑은 안정성 우선
-- `ProximityBySpace: false`: 1차 매핑에서는 false loop/link 위험을 줄임
+- `DetectionRate: 8.0`: 1→5→8 Hz 검증 후 회전 중 특징점 중첩을 유지하는 최종 mapping 처리율
+- `NeighborLinkRefining: true`: 연속 node의 odometry link를 PnP로 정제
+- `ProximityBySpace: true`: 공간상 가까운 비인접 과거 node와 local proximity link 생성 시도
 
 **검증 명령**
 
@@ -353,7 +359,7 @@ ros2 launch go2_rtabmap_launch visual_localization.launch.py database_path:=/hom
 - `delete_db_on_start`는 `false`여야 한다.
 - localization override에 `Mem/IncrementalMemory=false`가 있어야 한다.
 - localization override에 `Mem/InitWMWithAllNodes=true`가 있어야 한다.
-- `Rtabmap/DetectionRate`는 mapping보다 높은 `2.0`으로 설정해야 한다.
+- localization의 `Rtabmap/DetectionRate=2.0`은 mapping의 검증값 8.0 Hz와 별도로 유지한다.
 
 ---
 
@@ -455,11 +461,11 @@ ros2 run tf2_ros tf2_echo base_link camera_link
 
 | 항목 | 초기값 | 조정 기준 |
 |------|--------|-----------|
-| `base_link -> camera_link` x/y/z/rpy | `x=0.33, y=0.0, z=0.09, rpy=0/0/0` | 실제 카메라 장착 위치 |
-| `approx_sync_max_interval` | `0.1` | RGB/depth/camera_info stamp 차이 |
-| `Grid/RangeMax` | `4.0` | 실내 depth 품질과 노이즈 |
+| `base_link -> camera_link` x/y/z/rpy | `x=0.34, y=0.0, z=0.095, rpy=0/0/0` | 현재 실측값 사용, 정밀 extrinsic 검증 시 재조정 |
+| `approx_sync_max_interval` | `0.03` | RGB/depth/camera_info stamp 차이 |
+| `Grid/RangeMax` | `3.0` | 실내 depth 품질과 노이즈 |
 | `Vis/MinInliers` | `20` | 특징점 부족 또는 false match 빈도 |
-| `DetectionRate` | mapping `1.0`, localization `2.0` | CPU 사용량과 위치추정 안정성 |
+| `DetectionRate` | mapping `8.0`, localization `2.0` | mapping 8 Hz는 전체 루프 검증값, localization 2 Hz는 별도 운용값 |
 
 ---
 

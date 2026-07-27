@@ -47,6 +47,7 @@ def generate_launch_description():
         / 'rtabmap_lidar_indoor.yaml'
     )
     database_path = LaunchConfiguration('database_path')
+    input_cloud_topic = LaunchConfiguration('input_cloud_topic')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -63,6 +64,11 @@ def generate_launch_description():
             'use_sim_time',
             default_value='false',
             description='Use simulation clock.',
+        ),
+        DeclareLaunchArgument(
+            'input_cloud_topic',
+            default_value='/utlidar/cloud_deskewed',
+            description='Go2 point cloud topic consumed by the bridge.',
         ),
         DeclareLaunchArgument(
             'rviz',
@@ -97,6 +103,12 @@ def generate_launch_description():
             name='go2_rtabmap_bridge',
             output='screen',
             emulate_tty=True,
+            parameters=[
+                {
+                    'input_cloud_topic': input_cloud_topic,
+                    'use_sim_time': LaunchConfiguration('use_sim_time'),
+                },
+            ],
         ),
         Node(
             package='rtabmap_slam',

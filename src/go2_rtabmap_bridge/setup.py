@@ -19,6 +19,7 @@ setup(
     entry_points={
         'console_scripts': [
             'bridge_node = go2_rtabmap_bridge.bridge_node:main',
+            'odom_tf_bridge = go2_rtabmap_bridge.odom_tf_bridge:main',
         ],
     },
 )

@@ -1,0 +1,56 @@
+/**:
+  ros__parameters:
+    # Inputs
+    frame_id: base_link
+    map_frame_id: map
+    subscribe_rgbd: true
+    subscribe_rgb: false
+    subscribe_depth: false
+    subscribe_scan_cloud: false
+    subscribe_scan: false
+    subscribe_stereo: false
+    subscribe_user_data: false
+    subscribe_odom_info: false
+
+    # RGB-D synchronization and Go2 odom input.
+    approx_sync: true
+    approx_sync_max_interval: 0.03
+    odom_sensor_sync: true
+    wait_for_transform: 0.2
+    # Go2 odom is ~150 Hz while RealSense RGB-D arrives ~0.24 s late on the
+    # robot network. Keep enough odom history for RTAB-Map's RGB-D/odom sync.
+    topic_queue_size: 100
+    sync_queue_size: 100
+    qos_image: 1
+    qos_camera_info: 1
+    qos_odom: 1
+
+    # Use metric RGB-D PnP for neighbor, proximity and loop constraints. Go2
+    # odom supplies the initial body-motion estimate.
+    "Reg/Strategy": "0"
+    "Reg/Force3DoF": "false"
+    # Pin the feature pipeline instead of relying on build-dependent RTAB-Map
+    # defaults: GFTT detects corners and ORB describes them for matching.
+    "Kp/DetectorStrategy": "8"
+    "Vis/FeatureType": "8"
+    "Vis/EstimationType": "1"
+    "Vis/MinInliers": "20"
+
+    # Occupancy grid from aligned RGB-D depth.
+    "Grid/FromDepth": "true"
+    "Grid/RangeMin": "0.3"
+    "Grid/RangeMax": "3.0"
+    "Grid/DepthDecimation": "2"
+    "Grid/CellSize": "0.05"
+    "RGBD/CreateOccupancyGrid": "true"
+
+    # Keep the validated PnP neighbor and spatial-proximity graph settings.
+    # The finalized 8 Hz rate (125 ms) passed the controlled 5-to-8 Hz and
+    # whole-loop tests while preserving visual overlap during turns.
+    "RGBD/OptimizeFromGraphEnd": "false"
+    "RGBD/NeighborLinkRefining": "true"
+    "RGBD/ProximityBySpace": "true"
+    "RGBD/ProximityOdomGuess": "false"
+    "Rtabmap/DetectionRate": "8.0"
+    "RGBD/LinearUpdate": "0.1"
+    "RGBD/AngularUpdate": "0.1"

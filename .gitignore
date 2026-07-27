@@ -5,6 +5,7 @@ log/
 __pycache__/
 *.py[cod]
 
+maps/
 maps/active/*.db
 maps/active/*.db-*
 maps/sessions/**/*.db

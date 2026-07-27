@@ -10,7 +10,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.time import Time
 from sensor_msgs.msg import PointCloud2, PointField
-from tf2_ros import Buffer, TransformBroadcaster, TransformException
+from tf2_ros import Buffer, TransformBroadcaster, TransformException, TransformListener
 from tf2_sensor_msgs import transform_points
 
 
@@ -47,6 +47,7 @@ class Go2RtabmapBridge(Node):
 
         tf_cache_time = Duration(seconds=self._double_param('tf_cache_time_sec'))
         self._tf_buffer = Buffer(cache_time=tf_cache_time, node=self)
+        self._tf_listener = TransformListener(self._tf_buffer, self)
         self._tf_broadcaster = TransformBroadcaster(self)
 
         odom_qos = QoSProfile(
@@ -134,7 +135,8 @@ class Go2RtabmapBridge(Node):
             self._warn_cloud_drop(str(exc))
             return
 
-        cloud_out = self._transform_cloud_preserve_layout(msg, transform)
+        cloud = remove_zero_padding_points(msg)
+        cloud_out = self._transform_cloud_preserve_layout(cloud, transform)
         cloud_out.header.stamp = corrected_stamp
         cloud_out.header.frame_id = self._base_frame_id
         self._cloud_pub.publish(cloud_out)
@@ -231,6 +233,60 @@ class Go2RtabmapBridge(Node):
             if abs(delta.nanoseconds) <= self._tf_latest_fallback_tolerance.nanoseconds:
                 return latest_transform
             raise exact_lookup_error
+
+
+def remove_zero_padding_points(cloud):
+    fields = {field.name: field for field in cloud.fields}
+    required_fields = {'x', 'y', 'z', 'intensity'}
+    if not required_fields.issubset(fields):
+        return cloud
+
+    for field_name in required_fields:
+        field = fields[field_name]
+        if field.datatype != PointField.FLOAT32 or field.count != 1:
+            return cloud
+
+    height = cloud.height or 1
+    width = cloud.width
+    if width == 0:
+        return cloud
+
+    dtype = np.dtype('>f4' if cloud.is_bigendian else '<f4')
+    arrays = []
+    for field_name in ('x', 'y', 'z', 'intensity'):
+        arrays.append(
+            np.ndarray(
+                shape=(height, width),
+                dtype=dtype,
+                buffer=cloud.data,
+                offset=fields[field_name].offset,
+                strides=(cloud.row_step, cloud.point_step),
+            )
+        )
+
+    zero_padding = (
+        (arrays[0].reshape(-1) == 0.0)
+        & (arrays[1].reshape(-1) == 0.0)
+        & (arrays[2].reshape(-1) == 0.0)
+        & (arrays[3].reshape(-1) == 0.0)
+    )
+    if not np.any(zero_padding):
+        return cloud
+
+    point_bytes = np.ndarray(
+        shape=(height, width, cloud.point_step),
+        dtype=np.uint8,
+        buffer=cloud.data,
+        strides=(cloud.row_step, cloud.point_step, 1),
+    )
+    kept_points = point_bytes.reshape(-1, cloud.point_step)[~zero_padding].copy()
+
+    cloud_out = copy.deepcopy(cloud)
+    cloud_out.height = 1
+    cloud_out.width = int(kept_points.shape[0])
+    cloud_out.row_step = cloud_out.width * cloud.point_step
+    cloud_out.data = kept_points.tobytes()
+    return cloud_out
 
 
 def main(args=None):
