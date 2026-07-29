@@ -1,0 +1,42 @@
+{
+  "comparison_space": "SE(2): x, y, yaw only",
+  "alignment": "Each odometry is aligned to its own first x/y/yaw pose",
+  "matched_pairs": 2601,
+  "duration_sec": 87.494239014,
+  "time_gap_median_ms": 1.672587,
+  "time_gap_p95_ms": 3.204281,
+  "time_gap_max_ms": 25.143666,
+  "go2_path_length_raw_2d_m": 10.123208671781995,
+  "vo_path_length_raw_2d_m": 15.059975467575315,
+  "raw_2d_path_ratio_vo_to_go2": 1.487668184649235,
+  "go2_path_length_1hz_2d_m": 9.687357930059369,
+  "vo_path_length_1hz_2d_m": 11.438082426369867,
+  "path_1hz_ratio_vo_to_go2": 1.1807225983545102,
+  "xy_difference_median_m": 0.2961523845382056,
+  "xy_difference_rmse_m": 0.34077157430121274,
+  "xy_difference_p95_m": 0.5563215256030868,
+  "xy_difference_max_m": 0.5932707433289717,
+  "xy_difference_max_elapsed_sec": 42.999342285,
+  "final_xy_difference_m": 0.2007688155157435,
+  "yaw_difference_abs_median_deg": 6.024000511929585,
+  "yaw_difference_rmse_deg": 6.445038996110103,
+  "yaw_difference_abs_p95_deg": 10.58243041541471,
+  "yaw_difference_abs_max_deg": 11.72115395487642,
+  "final_yaw_difference_deg": -11.72115395487642,
+  "go2_final_pose": {
+    "x_m": 0.42178814876241844,
+    "y_m": -0.013080714409842903,
+    "yaw_deg": 12.004298247812374
+  },
+  "vo_final_pose": {
+    "x_m": 0.22228307646388543,
+    "y_m": 0.009410248458646252,
+    "yaw_deg": 0.28314429293595555
+  },
+  "first_5_sec_stationary": {
+    "go2_accumulated_xy_motion_m": 0.00321813634571381,
+    "vo_accumulated_xy_motion_m": 0.1675701572033918,
+    "go2_net_xy_motion_m": 0.0006489310675800153,
+    "vo_net_xy_motion_m": 0.0007521087491627388
+  }
+}

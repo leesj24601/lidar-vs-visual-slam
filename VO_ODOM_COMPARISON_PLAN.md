@@ -1,1538 +1,470 @@
-# VO-Go2 Odometry Comparison Implementation Plan
+# VO-Go2 Odometry 비교 설계
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+## 1. 목표
 
-**Goal:** 기존 Visual SLAM 로직을 변경하지 않고 RealSense RGB-D VO와 Go2 내부 odometry를 동시에 생성·기록하여 두 궤적의 차이와 VO tracking 안정성을 정량 비교한다.
+기존 Visual SLAM은 건드리지 않고 RealSense RGB-D 기반 VO를 별도로 생성해 Go2 내부 odometry와 같은 주행에서 비교한다.
 
-**Architecture:** 새 `vo_odom_comparison.launch.py`가 RTAB-Map SLAM 노드 없이 `rgbd_sync`, `rgbd_odometry`, `odom_tf_bridge`만 실행한다. 두 odometry는 `/odom/vo`와 `/odom/go2`로 분리하고 TF를 발행하지 않아 기존 `odom -> base_link`와 충돌하지 않게 한다. 비교는 rosbag을 오프라인으로 읽고 첫 동기 pose를 공통 원점으로 정렬한 뒤 위치·yaw 차이, 시간 동기 품질, VO 출력 중단 구간을 CSV와 JSON으로 저장한다.
+확인할 것은 두 가지다.
 
-**Tech Stack:** ROS 2 Humble, Python 3, `rtabmap_sync/rgbd_sync`, `rtabmap_odom/rgbd_odometry`, `nav_msgs/Odometry`, `rosbag2_py`, NumPy, pytest, ament/colcon
+1. VO가 실제 주행 중 끊기지 않고 동작하는가?
+2. VO와 Go2 odometry의 상대 궤적이 언제, 얼마나 달라지는가?
 
-## Global Constraints
+> Go2 odometry도 ground truth가 아니다. 결과는 정확도 오차가 아니라 두 추정기의 차이·발산량으로 해석한다.
 
-- 기존 `src/go2_rtabmap_launch/launch/visual_slam.launch.py`, `visual_localization.launch.py`, `rtabmap_visual_real.yaml`의 동작과 기본값을 변경하지 않는다.
-- RTAB-Map SLAM, map 생성, loop closure, localization 노드는 비교 실행에 포함하지 않는다.
-- 비교용 출력 토픽은 `/odom/go2`와 `/odom/vo`로 고정한다.
-- 두 비교 노드는 모두 odometry TF를 발행하지 않는다. 동일한 `base_link`에 대한 복수 부모 TF를 만들지 않는다.
-- Go2 odometry는 기존 bridge와 동일하게 clock epoch를 보정하고 `sensor_time_offset_sec=-0.015`를 적용한다.
-- VO는 aligned RGB-D와 현재 `base_link -> camera_link` extrinsic 기본값 `x=0.34`, `y=0.0`, `z=0.095`, `roll=pitch=yaw=0.0`을 사용한다.
-- 비교 시 최대 timestamp 차이는 기본 50 ms로 제한한다.
-- 첫 번째로 유효하게 매칭된 pose 쌍을 각 odometry의 원점으로 삼아 상대 궤적을 비교한다.
-- Go2 odometry는 ground truth가 아니다. 모든 결과 명칭은 `error` 대신 가능한 한 `difference` 또는 `divergence`를 사용한다.
-- 현재 worktree에 존재하는 사용자 변경사항을 덮어쓰거나 정리하지 않는다.
+### 이번 범위
 
-## 성공 조건
+| 포함 | 제외 |
+|---|---|
+| `/odom/go2`, `/odom/vo` 독립 생성 | RTAB-Map SLAM과 지도 생성 |
+| rosbag 동시 기록 | loop closure와 graph optimization |
+| 시간 동기화와 시작 pose 정렬 | 실시간 sensor fusion |
+| 위치·yaw·출력 안정성 비교 | Nav2 odometry 전환 |
+| 정지·복도·전체 루프 실험 | VO가 더 정확하다는 단정 |
 
-1. 단일 launch 명령으로 `/odom/go2`와 `/odom/vo`가 발행된다.
-2. 비교 launch를 실행해도 `/rtabmap/*` SLAM 노드와 `map -> odom` TF가 생성되지 않는다.
-3. 비교 launch 내부의 Go2 bridge와 VO 노드는 동적 TF를 발행하지 않는다.
-4. rosbag 분석기는 최대 50 ms 이내의 최근접 timestamp 쌍만 사용한다.
-5. 분석 결과는 timestamp별 CSV와 전체 요약 JSON을 생성한다.
-6. 요약에는 매칭 수, 시간차 통계, 주행거리, 최종/전체 위치 차이, yaw 차이, VO 출력률 및 장시간 gap이 포함된다.
-7. 합성 궤적 단위 테스트, launch 정적 테스트, 패키지 빌드와 전체 테스트가 통과한다.
+## 2. 한눈에 보는 전체 흐름
 
-## 파일 구조
+```mermaid
+flowchart LR
+    subgraph INPUT["센서"]
+        GO2_RAW["Go2 odom<br/>/utlidar/robot_odom"]
+        RGB["RGB"]
+        DEPTH["Aligned depth"]
+        INFO["CameraInfo"]
+    end
 
-- Create: `src/go2_rtabmap_launch/launch/vo_odom_comparison.launch.py`
-  - SLAM 없이 Go2 odom bridge, RGB-D sync, RGB-D VO, camera static TF를 실행한다.
-- Create: `src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py`
-  - 토픽, TF 비활성화, 기본 시간 보정값, SLAM 미실행을 정적으로 검증한다.
-- Modify: `src/go2_rtabmap_launch/package.xml`
-  - 런타임 의존성 `rtabmap_odom`을 선언한다.
-- Create: `src/go2_rtabmap_bridge/go2_rtabmap_bridge/odom_comparison.py`
-  - ROS I/O와 분리된 pose 정렬, timestamp matching, 통계 계산 로직을 제공한다.
-- Create: `src/go2_rtabmap_bridge/go2_rtabmap_bridge/analyze_odom_bag.py`
-  - rosbag에서 두 odometry를 읽고 CSV/JSON을 생성하는 CLI를 제공한다.
-- Create: `src/go2_rtabmap_bridge/test/test_odom_comparison.py`
-  - 합성 궤적으로 matching, 상대 pose, angle wrap, 통계를 검증한다.
-- Create: `src/go2_rtabmap_bridge/test/test_analyze_odom_bag_cli.py`
-  - CLI 인자와 결과 파일 schema를 검증한다.
-- Modify: `src/go2_rtabmap_bridge/setup.py`
-  - `analyze_odom_bag` console script를 등록한다.
-- Modify: `src/go2_rtabmap_bridge/package.xml`
-  - `rosbag2_py`, `rosidl_runtime_py` 실행 의존성을 선언한다.
-- Create: `VO_ODOM_COMPARISON.md`
-  - 빌드, 실행, rosbag 기록, 분석, 판정 방법을 루트에서 설명한다.
+    subgraph GENERATE["독립 odometry 생성"]
+        BRIDGE["Go2 odom bridge<br/>clock + -15 ms 보정"]
+        SYNC["RGB-D sync"]
+        VO["RGB-D VO<br/>rgbd_odometry"]
+    end
 
----
+    subgraph ODOM["비교 토픽"]
+        GO2["/odom/go2"]
+        VODOM["/odom/vo"]
+    end
 
-### Task 1: 비교 전용 VO/Go2 odometry launch
+    subgraph ANALYZE["기록·비교"]
+        BAG["rosbag"]
+        MATCH["timestamp matching<br/>≤ 50 ms"]
+        ALIGN["첫 pose 기준<br/>상대 궤적 정렬"]
+        METRIC["위치·yaw 발산<br/>VO rate·gap"]
+    end
 
-**Files:**
+    subgraph NEXT["후속 판단"]
+        KEEP["Go2 유지"]
+        FUSE["Go2 + VO 융합"]
+        TRYVO["VO 대체 실험"]
+    end
 
-- Create: `src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py`
-- Create: `src/go2_rtabmap_launch/launch/vo_odom_comparison.launch.py`
-- Modify: `src/go2_rtabmap_launch/package.xml`
+    GO2_RAW --> BRIDGE --> GO2
+    RGB --> SYNC
+    DEPTH --> SYNC
+    INFO --> SYNC
+    SYNC --> VO --> VODOM
+    GO2 --> BAG
+    VODOM --> BAG
+    BAG --> MATCH --> ALIGN --> METRIC
+    METRIC --> KEEP
+    METRIC --> FUSE
+    METRIC --> TRYVO
 
-**Interfaces:**
-
-- Consumes:
-  - `/utlidar/robot_odom` (`nav_msgs/msg/Odometry`)
-  - `/camera/color/image_raw` (`sensor_msgs/msg/Image`)
-  - `/camera/aligned_depth_to_color/image_raw` (`sensor_msgs/msg/Image`)
-  - `/camera/color/camera_info` (`sensor_msgs/msg/CameraInfo`)
-- Produces:
-  - `/odom/go2` (`nav_msgs/msg/Odometry`, frame `go2_odom`, child `base_link`)
-  - `/odom/vo` (`nav_msgs/msg/Odometry`, frame `vo_odom`, child `base_link`)
-  - `/camera/vo_compare/rgbd_image` (`rtabmap_msgs/msg/RGBDImage`)
-- TF ownership:
-  - 비교용 Go2 bridge: `publish_tf=false`
-  - RGB-D VO: `publish_tf=false`
-  - camera static TF만 `base_link -> camera_link`로 발행
-
-- [ ] **Step 1: 비교 launch의 계약을 나타내는 실패 테스트 작성**
-
-```python
-from pathlib import Path
-
-
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
-LAUNCH_FILE = PACKAGE_ROOT / 'launch' / 'vo_odom_comparison.launch.py'
-PACKAGE_XML = PACKAGE_ROOT / 'package.xml'
-
-
-def test_comparison_launch_runs_only_go2_and_rgbd_odometry():
-    text = LAUNCH_FILE.read_text()
-
-    assert "executable='odom_tf_bridge'" in text
-    assert "package='rtabmap_sync'" in text
-    assert "executable='rgbd_sync'" in text
-    assert "package='rtabmap_odom'" in text
-    assert "executable='rgbd_odometry'" in text
-    assert "package='rtabmap_slam'" not in text
-    assert "executable='rtabmap'" not in text
-
-
-def test_comparison_launch_separates_topics_and_disables_odom_tf():
-    text = LAUNCH_FILE.read_text()
-
-    assert "default_value='/odom/go2'" in text
-    assert "default_value='/odom/vo'" in text
-    assert "'odom_frame_id': 'go2_odom'" in text
-    assert "'odom_frame_id': 'vo_odom'" in text
-    assert text.count("'publish_tf': False") == 2
-    assert "default_value='-0.015'" in text
-    assert "'sensor_time_offset_sec': go2_time_offset_param" in text
-
-
-def test_launch_package_declares_rgbd_odometry_dependency():
-    assert '<exec_depend>rtabmap_odom</exec_depend>' in PACKAGE_XML.read_text()
+    SLAM["기존 Visual SLAM<br/>실행·변경하지 않음"]
+    SLAM -. 이번 범위 밖 .- GENERATE
 ```
 
-- [ ] **Step 2: 테스트가 기능 누락으로 실패하는지 확인**
+## 3. 실행 설계
 
-Run:
+별도 `vo_odom_comparison.launch.py`에서 다음 노드만 실행한다.
 
-```bash
-pytest -q src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py
-```
+| 구성 요소 | 입력 | 출력 | 역할 |
+|---|---|---|---|
+| Go2 odom bridge | `/utlidar/robot_odom` | `/odom/go2` | Go2 timestamp를 ROS/카메라 시간축에 맞춤 |
+| RGB-D sync | RGB, depth, CameraInfo | 비교용 RGB-D | 세 카메라 입력 동기화 |
+| RGB-D VO | 비교용 RGB-D | `/odom/vo` | RGB-D 특징점과 depth로 이동 추정 |
+| Camera static TF | 설정된 extrinsic | `base_link → camera_link` | VO 결과를 로봇 body 기준으로 표현 |
 
-Expected: `vo_odom_comparison.launch.py`가 아직 없어 `FileNotFoundError`로 FAIL한다.
+`rtabmap_slam`, `rtabmap_viz`, map database는 실행하지 않는다.
 
-- [ ] **Step 3: 비교 launch 최소 구현**
+### 토픽과 frame
 
-`vo_odom_comparison.launch.py`에 다음 launch argument를 선언한다.
+| 구분 | 토픽 | `header.frame_id` | `child_frame_id` |
+|---|---|---|---|
+| Go2 | `/odom/go2` | `go2_odom` | `base_link` |
+| VO | `/odom/vo` | `vo_odom` | `base_link` |
 
-```python
-DeclareLaunchArgument('rgb_topic', default_value='/camera/color/image_raw')
-DeclareLaunchArgument(
-    'depth_topic',
-    default_value='/camera/aligned_depth_to_color/image_raw',
-)
-DeclareLaunchArgument(
-    'camera_info_topic',
-    default_value='/camera/color/camera_info',
-)
-DeclareLaunchArgument(
-    'rgbd_topic',
-    default_value='/camera/vo_compare/rgbd_image',
-)
-DeclareLaunchArgument(
-    'go2_input_odom_topic',
-    default_value='/utlidar/robot_odom',
-)
-DeclareLaunchArgument('go2_odom_topic', default_value='/odom/go2')
-DeclareLaunchArgument('vo_odom_topic', default_value='/odom/vo')
-DeclareLaunchArgument('go2_sensor_time_offset_sec', default_value='-0.015')
-DeclareLaunchArgument('frame_id', default_value='base_link')
-DeclareLaunchArgument('camera_frame_id', default_value='camera_link')
-DeclareLaunchArgument('camera_x', default_value='0.34')
-DeclareLaunchArgument('camera_y', default_value='0.0')
-DeclareLaunchArgument('camera_z', default_value='0.095')
-DeclareLaunchArgument('camera_roll', default_value='0.0')
-DeclareLaunchArgument('camera_pitch', default_value='0.0')
-DeclareLaunchArgument('camera_yaw', default_value='0.0')
-DeclareLaunchArgument('use_sim_time', default_value='false')
-```
-
-launch 파일 상단에서 다음 substitution을 만든다.
-
-```python
-from launch.substitutions import LaunchConfiguration
-from launch_ros.parameter_descriptions import ParameterValue
-
-
-rgb_topic = LaunchConfiguration('rgb_topic')
-depth_topic = LaunchConfiguration('depth_topic')
-camera_info_topic = LaunchConfiguration('camera_info_topic')
-rgbd_topic = LaunchConfiguration('rgbd_topic')
-go2_input_odom_topic = LaunchConfiguration('go2_input_odom_topic')
-go2_odom_topic = LaunchConfiguration('go2_odom_topic')
-vo_odom_topic = LaunchConfiguration('vo_odom_topic')
-frame_id = LaunchConfiguration('frame_id')
-use_sim_time = LaunchConfiguration('use_sim_time')
-go2_time_offset_param = ParameterValue(
-    LaunchConfiguration('go2_sensor_time_offset_sec'),
-    value_type=float,
-)
-```
-
-Go2 bridge는 기존 `odom_tf_bridge`를 재사용하되 출력과 TF 설정만 비교용으로 격리한다.
-
-```python
-Node(
-    package='go2_rtabmap_bridge',
-    executable='odom_tf_bridge',
-    name='go2_comparison_odom_bridge',
-    output='screen',
-    parameters=[{
-        'input_odom_topic': go2_input_odom_topic,
-        'output_odom_topic': go2_odom_topic,
-        'odom_frame_id': 'go2_odom',
-        'footprint_frame_id': '',
-        'base_frame_id': frame_id,
-        'publish_tf': False,
-        'planarize_base_frame': False,
-        'sensor_time_offset_sec': go2_time_offset_param,
-        'use_sim_time': use_sim_time,
-    }],
-)
-```
-
-`rgbd_sync`는 기존 Visual SLAM과 동일한 세 카메라 입력을 사용하되 비교 전용 RGB-D 토픽을 발행한다.
-
-```python
-Node(
-    package='rtabmap_sync',
-    executable='rgbd_sync',
-    name='vo_comparison_rgbd_sync',
-    output='screen',
-    parameters=[{
-        'approx_sync': True,
-        'approx_sync_max_interval': 0.03,
-        'queue_size': 20,
-        'sync_queue_size': 20,
-        'qos_image': 1,
-        'qos_camera_info': 1,
-        'use_sim_time': use_sim_time,
-    }],
-    remappings=[
-        ('rgb/image', rgb_topic),
-        ('depth/image', depth_topic),
-        ('rgb/camera_info', camera_info_topic),
-        ('rgbd_image', rgbd_topic),
-    ],
-)
-```
-
-VO는 합쳐진 RGB-D 메시지를 받아 `/odom/vo`만 발행한다. 첫 비교에서는 현재 visual registration과 동일하게 GFTT/ORB 및 최소 inlier 20을 사용하고, GO2 odometry를 initial guess로 넣지 않는다.
-
-```python
-Node(
-    package='rtabmap_odom',
-    executable='rgbd_odometry',
-    name='rgbd_vo_comparison',
-    output='screen',
-    parameters=[{
-        'frame_id': frame_id,
-        'odom_frame_id': 'vo_odom',
-        'publish_tf': False,
-        'subscribe_rgbd': True,
-        'wait_for_transform': 0.2,
-        'qos': 1,
-        'qos_camera_info': 1,
-        'Vis/FeatureType': '8',
-        'Vis/MinInliers': '20',
-        'use_sim_time': use_sim_time,
-    }],
-    remappings=[
-        ('rgbd_image', rgbd_topic),
-        ('odom', vo_odom_topic),
-    ],
-)
-```
-
-다음 static transform만 추가한다. RealSense가 이미 발행하는 `camera_link -> optical frame` TF는 중복 생성하지 않는다.
-
-```python
-Node(
-    package='tf2_ros',
-    executable='static_transform_publisher',
-    name='vo_comparison_camera_static_tf',
-    output='screen',
-    arguments=[
-        '--x', LaunchConfiguration('camera_x'),
-        '--y', LaunchConfiguration('camera_y'),
-        '--z', LaunchConfiguration('camera_z'),
-        '--roll', LaunchConfiguration('camera_roll'),
-        '--pitch', LaunchConfiguration('camera_pitch'),
-        '--yaw', LaunchConfiguration('camera_yaw'),
-        '--frame-id', frame_id,
-        '--child-frame-id', LaunchConfiguration('camera_frame_id'),
-    ],
-)
-```
-
-`package.xml`에 다음 의존성을 추가한다.
-
-```xml
-<exec_depend>rtabmap_odom</exec_depend>
-```
-
-- [ ] **Step 4: launch 계약 테스트 통과 확인**
-
-Run:
-
-```bash
-pytest -q src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py
-```
-
-Expected: 3 tests PASS.
-
-- [ ] **Step 5: 기존 visual launch 회귀 테스트 확인**
-
-Run:
-
-```bash
-pytest -q src/go2_rtabmap_launch/test/test_visual_launch_defaults.py
-```
-
-Expected: 기존 테스트 전체 PASS.
-
-- [ ] **Step 6: 변경 범위를 분리해 커밋**
-
-```bash
-git add \
-  src/go2_rtabmap_launch/launch/vo_odom_comparison.launch.py \
-  src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py \
-  src/go2_rtabmap_launch/package.xml
-git commit -m "feat: add standalone VO odometry comparison launch"
-```
-
----
-
-### Task 2: 궤적 정렬과 timestamp matching 코어
-
-**Files:**
-
-- Create: `src/go2_rtabmap_bridge/test/test_odom_comparison.py`
-- Create: `src/go2_rtabmap_bridge/go2_rtabmap_bridge/odom_comparison.py`
-
-**Interfaces:**
-
-- Produces:
-  - `PoseSample(stamp_ns, position, orientation)`
-  - `MatchedPair(vo, go2, time_gap_ns)`
-  - `match_nearest_samples(vo_samples, go2_samples, max_gap_ns)`
-  - `relative_pose(origin, sample)`
-  - `build_comparison_rows(matched_pairs)`
-  - `summarize_comparison(rows, vo_samples)`
-- `PoseSample.position`: `tuple[float, float, float]`
-- `PoseSample.orientation`: normalized quaternion `(x, y, z, w)`
-- `build_comparison_rows()`의 각 row:
-  - `stamp_ns`
-  - `time_gap_ms`
-  - `go2_x_m`, `go2_y_m`, `go2_z_m`, `go2_yaw_rad`
-  - `vo_x_m`, `vo_y_m`, `vo_z_m`, `vo_yaw_rad`
-  - `position_difference_m`
-  - `yaw_difference_rad`
-
-- [ ] **Step 1: 최근접 timestamp matching 실패 테스트 작성**
-
-```python
-from go2_rtabmap_bridge.odom_comparison import (
-    PoseSample,
-    match_nearest_samples,
-)
-
-
-IDENTITY = (0.0, 0.0, 0.0, 1.0)
-
-
-def sample(stamp_ms, x=0.0, y=0.0, yaw_quaternion=IDENTITY):
-    return PoseSample(
-        stamp_ns=stamp_ms * 1_000_000,
-        position=(x, y, 0.0),
-        orientation=yaw_quaternion,
-    )
-
-
-def test_match_nearest_samples_rejects_pairs_over_max_gap():
-    go2 = [sample(0), sample(100), sample(200)]
-    vo = [sample(47), sample(151), sample(280)]
-
-    pairs = match_nearest_samples(
-        vo,
-        go2,
-        max_gap_ns=50_000_000,
-    )
-
-    assert [pair.go2.stamp_ns for pair in pairs] == [0, 200]
-    assert [pair.time_gap_ns for pair in pairs] == [47_000_000, 49_000_000]
-```
-
-- [ ] **Step 2: matching 테스트 RED 확인**
-
-Run:
-
-```bash
-pytest -q \
-  src/go2_rtabmap_bridge/test/test_odom_comparison.py::test_match_nearest_samples_rejects_pairs_over_max_gap
-```
-
-Expected: `odom_comparison` 모듈 누락으로 FAIL.
-
-- [ ] **Step 3: `PoseSample`, `MatchedPair`, 최근접 matching 최소 구현**
-
-```python
-from bisect import bisect_left
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class PoseSample:
-    stamp_ns: int
-    position: tuple
-    orientation: tuple
-
-
-@dataclass(frozen=True)
-class MatchedPair:
-    vo: PoseSample
-    go2: PoseSample
-    time_gap_ns: int
-
-
-def match_nearest_samples(vo_samples, go2_samples, max_gap_ns):
-    ordered_go2 = sorted(go2_samples, key=lambda item: item.stamp_ns)
-    stamps = [item.stamp_ns for item in ordered_go2]
-    pairs = []
-    for vo in sorted(vo_samples, key=lambda item: item.stamp_ns):
-        index = bisect_left(stamps, vo.stamp_ns)
-        candidates = ordered_go2[max(0, index - 1):min(len(ordered_go2), index + 1)]
-        if not candidates:
-            continue
-        go2 = min(candidates, key=lambda item: abs(item.stamp_ns - vo.stamp_ns))
-        gap_ns = abs(go2.stamp_ns - vo.stamp_ns)
-        if gap_ns <= max_gap_ns:
-            pairs.append(MatchedPair(vo=vo, go2=go2, time_gap_ns=gap_ns))
-    return pairs
-```
-
-- [ ] **Step 4: matching 테스트 GREEN 확인**
-
-Run:
-
-```bash
-pytest -q \
-  src/go2_rtabmap_bridge/test/test_odom_comparison.py::test_match_nearest_samples_rejects_pairs_over_max_gap
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: 공통 원점 상대 pose와 angle wrap 실패 테스트 추가**
-
-```python
-import math
-
-from go2_rtabmap_bridge.odom_comparison import (
-    build_comparison_rows,
-    match_nearest_samples,
-    yaw_quaternion,
-)
-
-
-def test_comparison_uses_each_first_pose_as_common_relative_origin():
-    go2 = [
-        sample(0, x=10.0, y=-2.0, yaw_quaternion=yaw_quaternion(0.5)),
-        sample(100, x=10.0 + math.cos(0.5), y=-2.0 + math.sin(0.5),
-               yaw_quaternion=yaw_quaternion(0.6)),
-    ]
-    vo = [
-        sample(0, x=0.0, y=0.0, yaw_quaternion=yaw_quaternion(0.0)),
-        sample(100, x=1.0, y=0.0, yaw_quaternion=yaw_quaternion(0.1)),
-    ]
-
-    rows = build_comparison_rows(
-        match_nearest_samples(vo, go2, max_gap_ns=50_000_000)
-    )
-
-    assert rows[0]['position_difference_m'] == 0.0
-    assert abs(rows[1]['position_difference_m']) < 1e-9
-    assert abs(rows[1]['yaw_difference_rad']) < 1e-9
-
-
-def test_yaw_difference_wraps_at_pi_boundary():
-    go2 = [
-        sample(0),
-        sample(100, yaw_quaternion=yaw_quaternion(math.radians(179.0))),
-    ]
-    vo = [
-        sample(0),
-        sample(100, yaw_quaternion=yaw_quaternion(math.radians(-179.0))),
-    ]
-
-    rows = build_comparison_rows(
-        match_nearest_samples(vo, go2, max_gap_ns=50_000_000)
-    )
-
-    assert math.isclose(
-        abs(rows[1]['yaw_difference_rad']),
-        math.radians(2.0),
-        abs_tol=1e-9,
-    )
-```
-
-- [ ] **Step 6: 상대 transform과 row 생성 테스트 RED 확인**
-
-Run:
-
-```bash
-pytest -q src/go2_rtabmap_bridge/test/test_odom_comparison.py
-```
-
-Expected: `yaw_quaternion` 또는 `build_comparison_rows` 미구현으로 FAIL.
-
-- [ ] **Step 7: 3D rigid transform 기반 상대 pose 구현**
-
-다음 계산을 그대로 구현한다.
-
-```python
-import math
-
-
-def normalized_quaternion(quaternion):
-    norm = math.sqrt(sum(value * value for value in quaternion))
-    if norm == 0.0:
-        raise ValueError('Quaternion norm must be non-zero')
-    return tuple(value / norm for value in quaternion)
-
-
-def quaternion_multiply(left, right):
-    lx, ly, lz, lw = left
-    rx, ry, rz, rw = right
-    return (
-        lw * rx + lx * rw + ly * rz - lz * ry,
-        lw * ry - lx * rz + ly * rw + lz * rx,
-        lw * rz + lx * ry - ly * rx + lz * rw,
-        lw * rw - lx * rx - ly * ry - lz * rz,
-    )
-
-
-def quaternion_inverse(quaternion):
-    x, y, z, w = normalized_quaternion(quaternion)
-    return -x, -y, -z, w
-
-
-def rotate_vector(quaternion, vector):
-    rotated = quaternion_multiply(
-        quaternion_multiply(
-            normalized_quaternion(quaternion),
-            (vector[0], vector[1], vector[2], 0.0),
-        ),
-        quaternion_inverse(quaternion),
-    )
-    return rotated[0], rotated[1], rotated[2]
-
-
-def yaw_from_quaternion(quaternion):
-    x, y, z, w = normalized_quaternion(quaternion)
-    return math.atan2(
-        2.0 * (w * z + x * y),
-        1.0 - 2.0 * (y * y + z * z),
-    )
-
-
-def yaw_quaternion(yaw):
-    half_yaw = yaw * 0.5
-    return 0.0, 0.0, math.sin(half_yaw), math.cos(half_yaw)
-
-
-def wrap_angle(angle):
-    return math.atan2(math.sin(angle), math.cos(angle))
-
-
-def relative_pose(origin, sample):
-    origin_inverse = quaternion_inverse(origin.orientation)
-    delta = tuple(
-        sample_value - origin_value
-        for sample_value, origin_value in zip(sample.position, origin.position)
-    )
-    return PoseSample(
-        stamp_ns=sample.stamp_ns,
-        position=rotate_vector(origin_inverse, delta),
-        orientation=normalized_quaternion(
-            quaternion_multiply(origin_inverse, sample.orientation)
-        ),
-    )
-
-
-def build_comparison_rows(matched_pairs):
-    if not matched_pairs:
-        raise ValueError(
-            'No odometry pairs matched within the configured time gap'
-        )
-
-    go2_origin = matched_pairs[0].go2
-    vo_origin = matched_pairs[0].vo
-    rows = []
-    for pair in matched_pairs:
-        go2 = relative_pose(go2_origin, pair.go2)
-        vo = relative_pose(vo_origin, pair.vo)
-        position_delta = tuple(
-            vo_value - go2_value
-            for vo_value, go2_value in zip(vo.position, go2.position)
-        )
-        go2_yaw = yaw_from_quaternion(go2.orientation)
-        vo_yaw = yaw_from_quaternion(vo.orientation)
-        rows.append({
-            'stamp_ns': pair.vo.stamp_ns,
-            'time_gap_ms': pair.time_gap_ns / 1_000_000.0,
-            'go2_x_m': go2.position[0],
-            'go2_y_m': go2.position[1],
-            'go2_z_m': go2.position[2],
-            'go2_yaw_rad': go2_yaw,
-            'vo_x_m': vo.position[0],
-            'vo_y_m': vo.position[1],
-            'vo_z_m': vo.position[2],
-            'vo_yaw_rad': vo_yaw,
-            'position_difference_m': math.sqrt(
-                sum(value * value for value in position_delta)
-            ),
-            'yaw_difference_rad': wrap_angle(vo_yaw - go2_yaw),
-        })
-    return rows
-```
-
-`relative_pose()`는 단순 위치 빼기가 아니라 다음 rigid transform을 사용한다.
+### TF 충돌 방지
 
 ```text
-T_relative = inverse(T_origin) * T_sample
+Go2 비교 odom     publish_tf = false
+RGB-D VO          publish_tf = false
+Camera extrinsic  base_link → camera_link만 발행
 ```
 
-`build_comparison_rows()`는 첫 matched pair의 Go2 pose와 VO pose를 각각 원점으로 사용한다. 두 상대 position의 Euclidean norm 차이를 `position_difference_m`로, `wrap_angle(vo_yaw - go2_yaw)`를 `yaw_difference_rad`로 저장한다.
+두 odometry는 토픽으로만 비교한다. 동일한 `base_link`에 두 odometry TF가 연결되지 않게 하며, 비교 중에는 기존 Visual SLAM launch도 함께 실행하지 않는다.
 
-- [ ] **Step 8: 상대 pose 테스트 GREEN 확인**
+## 4. 비교 설계
 
-Run:
-
-```bash
-pytest -q src/go2_rtabmap_bridge/test/test_odom_comparison.py
+```mermaid
+flowchart LR
+    A["두 odom 기록"] -->
+    B["VO 시각마다<br/>최근접 Go2 pose 선택"] -->
+    C["50 ms 초과 pair 제외"] -->
+    D["각자의 첫 pose를<br/>원점으로 변환"] -->
+    E["위치·yaw·주행거리 비교"] -->
+    F["VO tracking 안정성 판정"]
 ```
 
-Expected: 전체 PASS.
+### 4.1 시간축
 
-- [ ] **Step 9: 통계와 VO gap 실패 테스트 추가**
-
-```python
-from go2_rtabmap_bridge.odom_comparison import summarize_comparison
-
-
-def test_summary_reports_divergence_sync_and_vo_tracking_gaps():
-    go2 = [sample(stamp) for stamp in (0, 100, 200, 1000)]
-    vo = [
-        sample(0),
-        sample(100, x=0.1),
-        sample(200, x=0.2),
-        sample(1000, x=1.0),
-    ]
-    pairs = match_nearest_samples(vo, go2, max_gap_ns=50_000_000)
-    rows = build_comparison_rows(pairs)
-
-    summary = summarize_comparison(rows, vo_samples=vo, long_gap_sec=0.5)
-
-    assert summary['matched_pairs'] == 4
-    assert summary['vo_long_gap_count'] == 1
-    assert summary['vo_max_gap_sec'] == 0.8
-    assert 'position_difference_rmse_m' in summary
-    assert 'yaw_difference_p95_deg' in summary
-    assert 'time_gap_p95_ms' in summary
-```
-
-- [ ] **Step 10: 통계 테스트 RED 확인**
-
-Run:
-
-```bash
-pytest -q \
-  src/go2_rtabmap_bridge/test/test_odom_comparison.py::test_summary_reports_divergence_sync_and_vo_tracking_gaps
-```
-
-Expected: `summarize_comparison` 미구현으로 FAIL.
-
-- [ ] **Step 11: 요약 통계 최소 구현**
-
-`summarize_comparison()`은 다음 key를 항상 반환한다.
-
-```python
-{
-    'matched_pairs': int,
-    'duration_sec': float,
-    'time_gap_median_ms': float,
-    'time_gap_p95_ms': float,
-    'time_gap_max_ms': float,
-    'go2_path_length_m': float,
-    'vo_path_length_m': float,
-    'final_position_difference_m': float,
-    'position_difference_rmse_m': float,
-    'position_difference_p95_m': float,
-    'final_yaw_difference_deg': float,
-    'yaw_difference_rmse_deg': float,
-    'yaw_difference_p95_deg': float,
-    'vo_effective_rate_hz': float,
-    'vo_max_gap_sec': float,
-    'vo_long_gap_count': int,
-}
-```
-
-다음 helper와 계산식을 사용한다.
-
-```python
-import numpy as np
-
-
-def path_length(rows, prefix):
-    total = 0.0
-    previous = None
-    for row in rows:
-        current = (
-            row[f'{prefix}_x_m'],
-            row[f'{prefix}_y_m'],
-            row[f'{prefix}_z_m'],
-        )
-        if previous is not None:
-            total += math.sqrt(
-                sum(
-                    (current_value - previous_value) ** 2
-                    for current_value, previous_value in zip(current, previous)
-                )
-            )
-        previous = current
-    return total
-
-
-def rmse(values):
-    array = np.asarray(values, dtype=float)
-    return float(np.sqrt(np.mean(array * array)))
-
-
-def percentile(values, percentile_value):
-    return float(np.percentile(np.asarray(values, dtype=float), percentile_value))
-
-
-def summarize_comparison(rows, vo_samples, long_gap_sec=0.5):
-    if not rows:
-        raise ValueError(
-            'No odometry pairs matched within the configured time gap'
-        )
-
-    ordered_vo = sorted(vo_samples, key=lambda item: item.stamp_ns)
-    vo_gaps_sec = [
-        (current.stamp_ns - previous.stamp_ns) / 1_000_000_000.0
-        for previous, current in zip(ordered_vo, ordered_vo[1:])
-    ]
-    duration_sec = (
-        (rows[-1]['stamp_ns'] - rows[0]['stamp_ns']) / 1_000_000_000.0
-    )
-    vo_duration_sec = (
-        (ordered_vo[-1].stamp_ns - ordered_vo[0].stamp_ns) / 1_000_000_000.0
-        if len(ordered_vo) >= 2
-        else 0.0
-    )
-    position_difference = [
-        row['position_difference_m']
-        for row in rows
-    ]
-    yaw_difference_deg = [
-        math.degrees(abs(row['yaw_difference_rad']))
-        for row in rows
-    ]
-    time_gap_ms = [row['time_gap_ms'] for row in rows]
-
-    return {
-        'matched_pairs': len(rows),
-        'duration_sec': duration_sec,
-        'time_gap_median_ms': float(np.median(time_gap_ms)),
-        'time_gap_p95_ms': percentile(time_gap_ms, 95),
-        'time_gap_max_ms': max(time_gap_ms),
-        'go2_path_length_m': path_length(rows, 'go2'),
-        'vo_path_length_m': path_length(rows, 'vo'),
-        'final_position_difference_m': position_difference[-1],
-        'position_difference_rmse_m': rmse(position_difference),
-        'position_difference_p95_m': percentile(position_difference, 95),
-        'final_yaw_difference_deg': math.degrees(
-            rows[-1]['yaw_difference_rad']
-        ),
-        'yaw_difference_rmse_deg': rmse(yaw_difference_deg),
-        'yaw_difference_p95_deg': percentile(yaw_difference_deg, 95),
-        'vo_effective_rate_hz': (
-            (len(ordered_vo) - 1) / vo_duration_sec
-            if vo_duration_sec > 0.0
-            else 0.0
-        ),
-        'vo_max_gap_sec': max(vo_gaps_sec, default=0.0),
-        'vo_long_gap_count': sum(
-            gap_sec > long_gap_sec
-            for gap_sec in vo_gaps_sec
-        ),
-    }
-```
-
-빈 매칭 결과에는 다음 예외를 발생시킨다.
-
-```python
-raise ValueError('No odometry pairs matched within the configured time gap')
-```
-
-- [ ] **Step 12: 코어 전체 테스트 통과 확인**
-
-Run:
-
-```bash
-pytest -q src/go2_rtabmap_bridge/test/test_odom_comparison.py
-```
-
-Expected: 전체 PASS.
-
-- [ ] **Step 13: 비교 코어 커밋**
-
-```bash
-git add \
-  src/go2_rtabmap_bridge/go2_rtabmap_bridge/odom_comparison.py \
-  src/go2_rtabmap_bridge/test/test_odom_comparison.py
-git commit -m "feat: add odometry trajectory comparison core"
-```
-
----
-
-### Task 3: rosbag 분석 CLI와 CSV/JSON 출력
-
-**Files:**
-
-- Create: `src/go2_rtabmap_bridge/test/test_analyze_odom_bag_cli.py`
-- Create: `src/go2_rtabmap_bridge/go2_rtabmap_bridge/analyze_odom_bag.py`
-- Modify: `src/go2_rtabmap_bridge/setup.py`
-- Modify: `src/go2_rtabmap_bridge/package.xml`
-
-**Interfaces:**
-
-- Command:
-
-```bash
-ros2 run go2_rtabmap_bridge analyze_odom_bag \
-  <bag_directory> \
-  --go2-topic /odom/go2 \
-  --vo-topic /odom/vo \
-  --max-time-gap-ms 50 \
-  --long-vo-gap-ms 500 \
-  --output-prefix results/vo_go2
-```
-
-- Produces:
-  - `results/vo_go2_samples.csv`
-  - `results/vo_go2_summary.json`
-- Exit codes:
-  - `0`: 분석 완료
-  - non-zero: bag 열기 실패, 토픽 누락, 타입 불일치, 유효 matching 없음
-
-- [ ] **Step 1: CLI parser와 출력 schema 실패 테스트 작성**
-
-```python
-import json
-
-from go2_rtabmap_bridge.analyze_odom_bag import (
-    build_argument_parser,
-    write_outputs,
-)
-
-
-def test_cli_defaults_use_isolated_odometry_topics():
-    args = build_argument_parser().parse_args(['/tmp/example_bag'])
-
-    assert args.go2_topic == '/odom/go2'
-    assert args.vo_topic == '/odom/vo'
-    assert args.max_time_gap_ms == 50.0
-    assert args.long_vo_gap_ms == 500.0
-
-
-def test_write_outputs_creates_csv_and_json(tmp_path):
-    rows = [{
-        'stamp_ns': 100,
-        'time_gap_ms': 1.0,
-        'go2_x_m': 0.0,
-        'go2_y_m': 0.0,
-        'go2_z_m': 0.0,
-        'go2_yaw_rad': 0.0,
-        'vo_x_m': 0.0,
-        'vo_y_m': 0.0,
-        'vo_z_m': 0.0,
-        'vo_yaw_rad': 0.0,
-        'position_difference_m': 0.0,
-        'yaw_difference_rad': 0.0,
-    }]
-    summary = {'matched_pairs': 1}
-
-    csv_path, json_path = write_outputs(
-        tmp_path / 'comparison',
-        rows,
-        summary,
-    )
-
-    assert csv_path.name == 'comparison_samples.csv'
-    assert json_path.name == 'comparison_summary.json'
-    assert json.loads(json_path.read_text())['matched_pairs'] == 1
-    assert 'position_difference_m' in csv_path.read_text().splitlines()[0]
-```
-
-- [ ] **Step 2: CLI 테스트 RED 확인**
-
-Run:
-
-```bash
-pytest -q src/go2_rtabmap_bridge/test/test_analyze_odom_bag_cli.py
-```
-
-Expected: `analyze_odom_bag` 모듈 누락으로 FAIL.
-
-- [ ] **Step 3: parser와 output writer 최소 구현**
-
-`build_argument_parser()`는 다음 인자를 구현한다.
+Go2 stamp는 기존 bridge와 같은 방식으로 보정한다.
 
 ```text
-bag_directory                 positional Path
---go2-topic                   default /odom/go2
---vo-topic                    default /odom/vo
---max-time-gap-ms             default 50.0
---long-vo-gap-ms              default 500.0
---output-prefix               default odom_comparison
+보정된 Go2 stamp
+  = sensor stamp
+  + 최초 clock epoch offset
+  - 0.015 s
 ```
 
-`write_outputs()`는 부모 디렉터리를 만들고 고정된 column 순서로 UTF-8 CSV와 들여쓰기 2칸 JSON을 쓴다.
+VO는 RGB-D 카메라 stamp를 사용한다. VO 샘플마다 가장 가까운 Go2 pose를 찾고 `|t_vo - t_go2| ≤ 50 ms`인 쌍만 비교한다.
 
-```python
-import argparse
-import csv
-import json
-from pathlib import Path
+### 4.2 원점 정렬
 
+두 odometry의 절대 좌표 원점이 다르므로 첫 유효 pose를 각각 제거한다.
 
-CSV_FIELDS = [
-    'stamp_ns',
-    'time_gap_ms',
-    'go2_x_m',
-    'go2_y_m',
-    'go2_z_m',
-    'go2_yaw_rad',
-    'vo_x_m',
-    'vo_y_m',
-    'vo_z_m',
-    'vo_yaw_rad',
-    'position_difference_m',
-    'yaw_difference_rad',
-]
-
-
-def build_argument_parser():
-    parser = argparse.ArgumentParser(
-        description='Compare VO and Go2 odometry stored in a ROS 2 bag.'
-    )
-    parser.add_argument('bag_directory', type=Path)
-    parser.add_argument('--go2-topic', default='/odom/go2')
-    parser.add_argument('--vo-topic', default='/odom/vo')
-    parser.add_argument('--max-time-gap-ms', type=float, default=50.0)
-    parser.add_argument('--long-vo-gap-ms', type=float, default=500.0)
-    parser.add_argument(
-        '--output-prefix',
-        type=Path,
-        default=Path('odom_comparison'),
-    )
-    return parser
-
-
-def write_outputs(output_prefix, rows, summary):
-    output_prefix = Path(output_prefix)
-    output_prefix.parent.mkdir(parents=True, exist_ok=True)
-    csv_path = output_prefix.with_name(
-        f'{output_prefix.name}_samples.csv'
-    )
-    json_path = output_prefix.with_name(
-        f'{output_prefix.name}_summary.json'
-    )
-    with csv_path.open('w', encoding='utf-8', newline='') as stream:
-        writer = csv.DictWriter(stream, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        writer.writerows(rows)
-    json_path.write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2) + '\n',
-        encoding='utf-8',
-    )
-    return csv_path, json_path
+```text
+Go2 relative(t) = inverse(Go2(0)) × Go2(t)
+VO relative(t)  = inverse(VO(0))  × VO(t)
 ```
 
-- [ ] **Step 4: parser/output 테스트 GREEN 확인**
+회전을 포함한 rigid transform으로 정렬하며 단순 position 빼기는 사용하지 않는다.
 
-Run:
+### 4.3 비교 순서와 지표
+
+| 우선순위 | 확인 항목 | 핵심 지표 |
+|---:|---|---|
+| 1 | VO가 계속 동작하는가? | effective rate, max gap, 0.5초 초과 gap 횟수 |
+| 2 | 두 토픽 시간이 맞는가? | matched pairs, time gap median/p95/max |
+| 3 | 상대 궤적이 얼마나 달라지는가? | path length, position/yaw difference RMSE·p95 |
+| 4 | 주행 끝에서 얼마나 벌어지는가? | final position/yaw difference |
+
+기준:
+
+- `VO max gap > 0.5 s`: tracking loss 또는 처리 중단 후보
+- `time gap p95 ≤ 33 ms`: 30 Hz 카메라 한 프레임 이내 동기
+- position/yaw difference: 정확도 오차가 아닌 두 추정기의 발산량
+
+## 5. 기록과 결과
+
+### 빠른 비교용 bag
+
+```text
+/odom/go2
+/odom/vo
+```
+
+### VO 재처리까지 가능한 bag
+
+```text
+/utlidar/robot_odom
+/odom/go2
+/odom/vo
+/camera/color/image_raw
+/camera/aligned_depth_to_color/image_raw
+/camera/color/camera_info
+/tf
+/tf_static
+```
+
+### 분석 결과
+
+```text
+results/
+├── <experiment>_samples.csv    # timestamp별 상대 pose와 차이
+└── <experiment>_summary.json   # rate, gap, 동기, 발산 요약
+```
+
+## 6. 실기 실험
+
+```mermaid
+flowchart LR
+    A["1. 정지 2분<br/>drift·jitter"] -->
+    B["2. 복도 왕복<br/>저특징 tracking"] -->
+    C["3. 전체 루프<br/>누적 drift·복귀"] -->
+    D["유지·융합·대체 판단"]
+```
+
+| 실험 | 확인 내용 |
+|---|---|
+| 정지 2분 | Go2 yaw drift, VO jitter, 가짜 이동, VO 출력 중단 |
+| 저특징 복도 왕복 | feature 부족, 빠른 회전·모션 블러, tracking 재초기화 |
+| 전체 루프 | 누적 위치·yaw 발산, 주행거리 차이, 시작점 복귀 일관성 |
+
+한 번의 주행으로 결론 내리지 않고 세 조건에서 같은 경향이 반복되는지 확인한다.
+
+## 7. 결과에 따른 다음 단계
+
+| 결과 | 해석 | 다음 단계 |
+|---|---|---|
+| VO가 자주 끊김 | 순수 VO가 현재 주행 조건에 불안정 | Go2 유지, VIO/보조 visual constraint 검토 |
+| VO는 안정적이나 누적 발산이 큼 | 단독 대체 이점이 작음 | 현재 Go2 + Visual SLAM 유지 |
+| VO가 안정적이고 Go2 drift를 보완 | 두 센서가 상호 보완적 | Go2 + VO fusion 실험 |
+| VO가 전 구간·반복 실험에서 일관적 | 단독 odometry 후보 | VO 기반 SLAM 분리 실험 |
+
+## 8. 구현 로드맵
+
+```mermaid
+flowchart LR
+    P1["1. 비교 launch<br/>두 odom 생성"] -->
+    P2["2. rosbag 기록"] -->
+    P3["3. 상대 궤적 분석"] -->
+    P4["4. 실기 3종 검증"] -->
+    P5["5. 후속 방식 결정"]
+```
+
+### 산출물
+
+- 비교 전용 `vo_odom_comparison.launch.py`
+- rosbag 기반 odometry 비교 도구
+- 실험별 CSV/JSON 결과
+- 유지·융합·대체 중 다음 단계 결정
+
+### 완료 조건
+
+- 기존 Visual SLAM 코드와 설정이 바뀌지 않는다.
+- `/odom/go2`, `/odom/vo`가 TF 충돌 없이 독립 발행된다.
+- 정지·복도·전체 루프 결과가 생성된다.
+- VO tracking 안정성과 두 궤적의 발산 구간을 설명할 수 있다.
+
+## 9. 파일 생성·수정 지도
+
+### 전체 파일 흐름
+
+```text
+기존 센서와 노드
+├── odom_tf_bridge.py                  그대로 재사용
+├── visual_slam.launch.py              값만 참고, 변경 없음
+└── rtabmap_visual_real.yaml           변경 없음
+
+새 비교 실행
+└── vo_odom_comparison.launch.py        새로 생성
+    ├── odom_tf_bridge 실행             /odom/go2 생성
+    ├── rgbd_sync 실행                  RGB-D 동기화
+    └── rgbd_odometry 실행              /odom/vo 생성
+
+새 오프라인 분석
+├── odom_comparison.py                  새로 생성: 정렬·비교 계산
+└── analyze_odom_bag.py                 새로 생성: bag 입출력과 CLI
+
+패키지 연결
+├── go2_rtabmap_launch/package.xml      rtabmap_odom 의존성 추가
+├── go2_rtabmap_bridge/setup.py         분석 명령 등록
+└── go2_rtabmap_bridge/package.xml      rosbag 분석 의존성 추가
+```
+
+### 9.1 기존 파일을 수정 없이 재사용
+
+| 파일 | 사용 이유 | 처리 |
+|---|---|---|
+| `src/go2_rtabmap_bridge/go2_rtabmap_bridge/odom_tf_bridge.py` | Go2 clock epoch 보정, `-0.015 s` 보정, 출력 토픽/frame 변경, TF 비활성화를 이미 파라미터로 지원 | 수정하지 않고 새 launch에서 다른 파라미터로 실행 |
+| `src/go2_rtabmap_launch/launch/visual_slam.launch.py` | 카메라 토픽, RGB-D sync, camera extrinsic 기본값을 확인하는 기준 | 참고만 하고 수정하지 않음 |
+| `src/go2_rtabmap_launch/config/rtabmap_visual_real.yaml` | 기존 Visual SLAM의 검증된 설정 | 비교 VO와 분리하고 수정하지 않음 |
+| `src/go2_rtabmap_launch/setup.py` | `launch/*.launch.py`를 자동으로 설치 | 새 launch가 자동 포함되므로 수정하지 않음 |
+| `src/go2_rtabmap_bridge/test/test_odom_tf_bridge.py` | 기존 Go2 timestamp/TF 동작의 회귀 검증 | 수정하지 않고 기존 테스트 그대로 실행 |
+| `src/go2_rtabmap_launch/test/test_visual_launch_defaults.py` | 기존 Visual SLAM이 바뀌지 않았는지 확인 | 수정하지 않고 기존 테스트 그대로 실행 |
+
+### 9.2 기존 파일에서 수정할 부분
+
+| 파일 | 수정 내용 | 이유 |
+|---|---|---|
+| `src/go2_rtabmap_launch/package.xml` | `<exec_depend>rtabmap_odom</exec_depend>` 추가 | 새 launch에서 `rtabmap_odom/rgbd_odometry` 실행 |
+| `src/go2_rtabmap_bridge/setup.py` | `analyze_odom_bag` console script 등록 | `ros2 run go2_rtabmap_bridge analyze_odom_bag bags/vo_go2_compare --output-prefix results/vo_go2` 형태로 분석 실행 |
+| `src/go2_rtabmap_bridge/package.xml` | `rosbag2_py`, `rosidl_runtime_py` 의존성 추가 | rosbag 읽기와 저장된 ROS 메시지 역직렬화 |
+| `COMMANDS.md` | 비교 launch, bag 기록, 분석 명령 추가 | 실기 실행 명령을 한곳에서 확인 |
+
+기존 파일의 수정은 패키지 의존성과 실행 명령 등록에만 한정한다. 기존 odometry와 Visual SLAM 로직은 수정하지 않는다.
+
+### 9.3 새로 생성할 실행 파일
+
+#### `src/go2_rtabmap_launch/launch/vo_odom_comparison.launch.py`
+
+비교 실험의 진입점이다. 다음 네 노드만 구성한다.
+
+```text
+go2_rtabmap_bridge/odom_tf_bridge
+    /utlidar/robot_odom → /odom/go2
+    sensor_time_offset_sec = -0.015
+    publish_tf = false
+
+rtabmap_sync/rgbd_sync
+    RGB + aligned depth + CameraInfo → 비교용 RGB-D
+
+rtabmap_odom/rgbd_odometry
+    비교용 RGB-D → /odom/vo
+    진단 정보 → /odom_info
+    visual feature depth = 0.3–4.0 m
+    publish_tf = false
+
+tf2_ros/static_transform_publisher
+    base_link → camera_link
+```
+
+이 launch에는 `rtabmap_slam`, `rtabmap_viz`, database, map 생성 노드를 넣지 않는다.
+
+### 9.4 새로 생성할 분석 파일
+
+| 새 파일 | 책임 |
+|---|---|
+| `src/go2_rtabmap_bridge/go2_rtabmap_bridge/odom_comparison.py` | timestamp 최근접 matching, 첫 pose 기준 상대 transform, 위치·yaw 차이와 통계 계산 |
+| `src/go2_rtabmap_bridge/go2_rtabmap_bridge/analyze_odom_bag.py` | rosbag에서 `/odom/go2`, `/odom/vo`를 읽고 비교 코어를 호출해 CSV/JSON 저장 |
+
+두 파일을 분리하는 이유는 rosbag 입출력과 궤적 계산을 분리해 계산 로직을 작은 합성 궤적으로 검증할 수 있게 하기 위해서다.
+
+### 9.5 새로 생성할 테스트 파일
+
+| 새 파일 | 검증 내용 |
+|---|---|
+| `src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py` | 두 odom 토픽 분리, TF 비활성화, SLAM 노드 미실행, `-0.015 s` 기본값 |
+| `src/go2_rtabmap_bridge/test/test_odom_comparison.py` | timestamp matching, 50 ms 제한, 첫 pose 정렬, yaw wrap, 발산 통계 |
+| `src/go2_rtabmap_bridge/test/test_analyze_odom_bag.py` | 실제 rosbag 읽기, 토픽 누락 처리, CSV/JSON 결과 형식 |
+
+### 9.6 이번 단계에서 만들지 않는 파일
+
+| 제외 항목 | 이유 |
+|---|---|
+| 별도 VO 설정 YAML | 첫 비교 파라미터가 적어 launch 안에서 명시하는 편이 흐름 확인에 유리 |
+| RViz config | 첫 단계는 rosbag 정량 비교가 기준이며 raw odom은 원점이 달라 직접 overlay할 수 없음 |
+| 실시간 Path 정렬 노드 | rosbag 결과 확인 후 필요할 때 선택 기능으로 추가 |
+| 새로운 SLAM launch | VO 안정성 검증 전에는 SLAM 입력을 전환하지 않음 |
+| sensor fusion 설정 | 두 odometry의 특성을 확인한 뒤 별도 단계에서 설계 |
+
+### 9.7 구현 후 예상 구조
+
+```text
+go2_lidar_slam/
+├── COMMANDS.md                                      수정
+├── VO_ODOM_COMPARISON_PLAN.md                       현재 계획 문서
+└── src/
+    ├── go2_rtabmap_bridge/
+    │   ├── package.xml                              수정
+    │   ├── setup.py                                 수정
+    │   ├── go2_rtabmap_bridge/
+    │   │   ├── odom_tf_bridge.py                    기존 그대로
+    │   │   ├── odom_comparison.py                   신규
+    │   │   └── analyze_odom_bag.py                  신규
+    │   └── test/
+    │       ├── test_odom_tf_bridge.py                기존 그대로
+    │       ├── test_odom_comparison.py               신규
+    │       └── test_analyze_odom_bag.py              신규
+    └── go2_rtabmap_launch/
+        ├── package.xml                              수정
+        ├── setup.py                                 기존 그대로
+        ├── launch/
+        │   ├── visual_slam.launch.py                기존 그대로
+        │   └── vo_odom_comparison.launch.py         신규
+        ├── config/
+        │   └── rtabmap_visual_real.yaml             기존 그대로
+        └── test/
+            ├── test_visual_launch_defaults.py       기존 그대로
+            └── test_vo_odom_comparison_launch.py    신규
+```
+
+### 파일 변경 요약
+
+| 구분 | 개수 | 대상 |
+|---|---:|---|
+| 기존 파일 수정 | 4개 | 두 `package.xml`, bridge `setup.py`, `COMMANDS.md` |
+| 새 실행 코드 | 3개 | 비교 launch, 비교 계산, bag 분석 CLI |
+| 새 테스트 | 3개 | launch, 계산, bag 분석 테스트 |
+| 변경하지 않는 핵심 SLAM 코드 | 3개 | visual launch, visual YAML, Go2 odom bridge |
+
+## 10. RViz 화살표 비교용 첫 Pose 자동 정렬
+
+### 10.1 목적
+
+`/odom/go2`와 `/odom/vo`는 서로 다른 odom 원점을 사용한다. 따라서 두 메시지를
+RViz의 같은 Fixed Frame에 단순히 연결하면, 실제 주행 전부터 화살표의 시작 위치와
+방향이 다르게 보인다.
+
+이번 추가 기능은 두 odometry를 변경하거나 새 odometry 토픽을 만들지 않는다.
+비교 launch가 시작된 뒤 처음으로 시간 차이가 충분히 작은 두 Pose를 한 쌍으로
+선택하고, 그 시점의 x·y·yaw가 모두 `odom_compare`의 원점이 되도록 프레임 변환만
+한 번 발행한다.
+
+```text
+/odom/go2 ─┐
+            ├─ 첫 동기 Pose 선택 ──> odom_compare → go2_odom 정적 TF
+/odom/vo  ─┘                     └─> odom_compare → vo_odom 정적 TF
+
+RViz Fixed Frame: odom_compare
+Odometry 1: /odom/go2
+Odometry 2: /odom/vo
+```
+
+### 10.2 정렬 수학
+
+각 odometry의 첫 평면 Pose를 다음처럼 둔다.
+
+```text
+T_go2_first = (x_go2, y_go2, yaw_go2)
+T_vo_first  = (x_vo,  y_vo,  yaw_vo)
+```
+
+발행할 정적 변환은 각 첫 Pose의 평면 역변환이다.
+
+```text
+T_odom_compare_go2_odom = inverse(T_go2_first)
+T_odom_compare_vo_odom  = inverse(T_vo_first)
+```
+
+이 변환을 적용하면 두 첫 Pose는 모두 `(x=0, y=0, yaw=0)`이 된다. 이후 Pose는
+각 odometry가 계산한 상대 운동을 그대로 유지하므로, RViz의 Odometry 화살표로
+x·y·yaw 궤적 차이를 볼 수 있다.
+
+Go2의 보행에 따른 z·roll·pitch는 odometry 메시지에 그대로 남긴다. 이번 비교의
+원점 정렬에는 평면 성분만 사용하며 VO 계산에 `Reg/Force3DoF`를 적용하지 않는다.
+
+### 10.3 첫 Pose 선택 규칙
+
+- `/odom/go2`, `/odom/vo`를 각각 작은 메모리 버퍼에 보관한다.
+- header timestamp 차이가 `50 ms` 이하인 가장 가까운 첫 쌍을 사용한다.
+- frame id가 비어 있거나 quaternion이 유효하지 않은 메시지는 제외한다.
+- 한 번 정렬한 뒤에는 시작 원점을 다시 바꾸지 않는다.
+- launch 직후 로봇이 정지한 상태에서 첫 쌍을 받는 것을 운용 기준으로 한다.
+
+### 10.4 파일 변경
+
+| 구분 | 파일 | 변경 내용 |
+|---|---|---|
+| 신규 | `src/go2_rtabmap_bridge/go2_rtabmap_bridge/odom_initial_alignment_tf.py` | 두 odom의 첫 동기 Pose를 받아 평면 역변환 두 개를 `/tf_static`에 발행 |
+| 신규 | `src/go2_rtabmap_bridge/test/test_odom_initial_alignment_tf.py` | 역변환 수학, timestamp matching, 유효성 검증 |
+| 수정 | `src/go2_rtabmap_bridge/setup.py` | `odom_initial_alignment_tf` 실행 파일 등록 |
+| 수정 | `src/go2_rtabmap_launch/launch/vo_odom_comparison.launch.py` | 자동 정렬 노드와 관련 launch argument 추가 |
+| 수정 | `src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py` | 정렬 노드·토픽·공통 프레임·50 ms 설정 계약 검증 |
+
+기존 `visual_slam.launch.py`, RTAB-Map 설정, `odom_tf_bridge.py`,
+`rgbd_odometry` 파라미터와 `/odom/go2`, `/odom/vo` 메시지는 수정하지 않는다.
+
+### 10.5 실행과 주의사항
+
+기존과 같은 명령으로 실행한다.
 
 ```bash
-pytest -q src/go2_rtabmap_bridge/test/test_analyze_odom_bag_cli.py
-```
-
-Expected: 2 tests PASS.
-
-- [ ] **Step 5: rosbag topic reader 실패 테스트 추가**
-
-rosbag I/O 자체를 mock으로 검증하지 않는다. 테스트에서 임시 sqlite3 bag을 생성하고 두 `Odometry` 메시지를 기록한 뒤 다시 읽는다.
-
-```python
-from nav_msgs.msg import Odometry
-from rclpy.serialization import serialize_message
-from rosbag2_py import (
-    ConverterOptions,
-    SequentialWriter,
-    StorageOptions,
-    TopicMetadata,
-)
-
-
-def odometry(stamp_ns, x):
-    message = Odometry()
-    message.header.stamp.sec = stamp_ns // 1_000_000_000
-    message.header.stamp.nanosec = stamp_ns % 1_000_000_000
-    message.header.frame_id = 'test_odom'
-    message.child_frame_id = 'base_link'
-    message.pose.pose.position.x = x
-    message.pose.pose.orientation.w = 1.0
-    return message
-
-
-def write_test_bag(bag_path, messages_by_topic):
-    writer = SequentialWriter()
-    writer.open(
-        StorageOptions(uri=str(bag_path), storage_id='sqlite3'),
-        ConverterOptions(
-            input_serialization_format='cdr',
-            output_serialization_format='cdr',
-        ),
-    )
-    for topic_name in messages_by_topic:
-        writer.create_topic(TopicMetadata(
-            name=topic_name,
-            type='nav_msgs/msg/Odometry',
-            serialization_format='cdr',
-            offered_qos_profiles='',
-        ))
-    for topic_name, messages in messages_by_topic.items():
-        for message in messages:
-            stamp_ns = (
-                message.header.stamp.sec * 1_000_000_000
-                + message.header.stamp.nanosec
-            )
-            writer.write(topic_name, serialize_message(message), stamp_ns)
-    del writer
-    return bag_path
-
-
-def test_read_odometry_topics_from_real_rosbag(tmp_path):
-    bag_path = write_test_bag(
-        tmp_path / 'bag',
-        {
-            '/odom/go2': [odometry(stamp_ns=1_000_000_000, x=0.0)],
-            '/odom/vo': [odometry(stamp_ns=1_001_000_000, x=0.0)],
-        },
-    )
-
-    samples = read_odometry_topics(
-        bag_path,
-        ['/odom/go2', '/odom/vo'],
-    )
-
-    assert samples['/odom/go2'][0].stamp_ns == 1_000_000_000
-    assert samples['/odom/vo'][0].stamp_ns == 1_001_000_000
-```
-
-- [ ] **Step 6: rosbag reader 테스트 RED 확인**
-
-Run:
-
-```bash
-pytest -q \
-  src/go2_rtabmap_bridge/test/test_analyze_odom_bag_cli.py::test_read_odometry_topics_from_real_rosbag
-```
-
-Expected: `read_odometry_topics` 미구현으로 FAIL.
-
-- [ ] **Step 7: 실제 rosbag2 reader 구현**
-
-다음 ROS 2 API를 사용한다.
-
-```python
-from rclpy.serialization import deserialize_message
-from rosbag2_py import (
-    ConverterOptions,
-    SequentialReader,
-    StorageFilter,
-    StorageOptions,
-)
-from rosidl_runtime_py.utilities import get_message
-```
-
-구현 규칙:
-
-1. `SequentialReader.open()`으로 bag을 연다.
-2. `get_all_topics_and_types()`에서 요청 토픽 존재 여부와 타입을 확인한다.
-3. 두 토픽 타입이 모두 `nav_msgs/msg/Odometry`인지 확인한다.
-4. `reader.set_filter(StorageFilter(topics=requested_topics))`를 적용한다.
-5. 메시지의 `header.stamp`를 비교 timestamp로 사용한다.
-6. `header.stamp`가 0이면 bag record timestamp를 fallback으로 사용한다.
-7. 각 토픽 샘플을 timestamp 오름차순으로 반환한다.
-
-```python
-def pose_sample_from_odometry(message, recorded_stamp_ns):
-    header_stamp_ns = (
-        message.header.stamp.sec * 1_000_000_000
-        + message.header.stamp.nanosec
-    )
-    position = message.pose.pose.position
-    orientation = message.pose.pose.orientation
-    return PoseSample(
-        stamp_ns=header_stamp_ns or recorded_stamp_ns,
-        position=(position.x, position.y, position.z),
-        orientation=normalized_quaternion((
-            orientation.x,
-            orientation.y,
-            orientation.z,
-            orientation.w,
-        )),
-    )
-
-
-def read_odometry_topics(bag_directory, requested_topics):
-    reader = SequentialReader()
-    reader.open(
-        StorageOptions(uri=str(bag_directory), storage_id='sqlite3'),
-        ConverterOptions(
-            input_serialization_format='cdr',
-            output_serialization_format='cdr',
-        ),
-    )
-    topic_types = {
-        metadata.name: metadata.type
-        for metadata in reader.get_all_topics_and_types()
-    }
-    missing = [
-        topic
-        for topic in requested_topics
-        if topic not in topic_types
-    ]
-    if missing:
-        raise ValueError(
-            f'Missing odometry topics in bag: {", ".join(missing)}'
-        )
-    invalid = [
-        topic
-        for topic in requested_topics
-        if topic_types[topic] != 'nav_msgs/msg/Odometry'
-    ]
-    if invalid:
-        raise ValueError(
-            f'Expected nav_msgs/msg/Odometry: {", ".join(invalid)}'
-        )
-
-    reader.set_filter(StorageFilter(topics=list(requested_topics)))
-    message_types = {
-        topic: get_message(topic_types[topic])
-        for topic in requested_topics
-    }
-    samples = {topic: [] for topic in requested_topics}
-    while reader.has_next():
-        topic, serialized, recorded_stamp_ns = reader.read_next()
-        message = deserialize_message(serialized, message_types[topic])
-        samples[topic].append(
-            pose_sample_from_odometry(message, recorded_stamp_ns)
-        )
-    for topic in samples:
-        samples[topic].sort(key=lambda item: item.stamp_ns)
-    return samples
-```
-
-- [ ] **Step 8: rosbag reader 테스트 GREEN 확인**
-
-Run:
-
-```bash
-pytest -q src/go2_rtabmap_bridge/test/test_analyze_odom_bag_cli.py
-```
-
-Expected: 전체 PASS.
-
-- [ ] **Step 9: `main()` 연결과 entry point 등록**
-
-`main()` 흐름을 다음 순서로 고정한다.
-
-```python
-args = build_argument_parser().parse_args()
-samples = read_odometry_topics(
-    args.bag_directory,
-    [args.go2_topic, args.vo_topic],
-)
-pairs = match_nearest_samples(
-    samples[args.vo_topic],
-    samples[args.go2_topic],
-    max_gap_ns=round(args.max_time_gap_ms * 1_000_000),
-)
-rows = build_comparison_rows(pairs)
-summary = summarize_comparison(
-    rows,
-    vo_samples=samples[args.vo_topic],
-    long_gap_sec=args.long_vo_gap_ms / 1000.0,
-)
-write_outputs(args.output_prefix, rows, summary)
-```
-
-`setup.py`에 다음 entry point를 추가한다.
-
-```python
-'analyze_odom_bag = go2_rtabmap_bridge.analyze_odom_bag:main',
-```
-
-`package.xml`에 다음 의존성을 추가한다.
-
-```xml
-<exec_depend>rosbag2_py</exec_depend>
-<exec_depend>rosidl_runtime_py</exec_depend>
-```
-
-- [ ] **Step 10: bridge 패키지 테스트 전체 확인**
-
-Run:
-
-```bash
-pytest -q src/go2_rtabmap_bridge/test
-```
-
-Expected: 기존 odom bridge 테스트와 새 비교 테스트 전체 PASS.
-
-- [ ] **Step 11: 분석 CLI 커밋**
-
-```bash
-git add \
-  src/go2_rtabmap_bridge/go2_rtabmap_bridge/analyze_odom_bag.py \
-  src/go2_rtabmap_bridge/setup.py \
-  src/go2_rtabmap_bridge/package.xml \
-  src/go2_rtabmap_bridge/test/test_analyze_odom_bag_cli.py
-git commit -m "feat: analyze VO and Go2 odometry bags"
-```
-
----
-
-### Task 4: 실행 문서와 실기 비교 절차
-
-**Files:**
-
-- Create: `VO_ODOM_COMPARISON.md`
-
-**Interfaces:**
-
-- Documents:
-  - 빌드
-  - 토픽 사전 확인
-  - 비교 launch
-  - 최소/재현용 rosbag 기록
-  - 분석 명령
-  - 결과 판독
-  - 실패 조건과 주의사항
-
-- [ ] **Step 1: 실행 문서 검증 테스트 추가**
-
-`src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py`에 다음 테스트를 추가한다.
-
-```python
-RUNBOOK = PACKAGE_ROOT.parents[1] / 'VO_ODOM_COMPARISON.md'
-
-
-def test_comparison_runbook_has_reproducible_commands_and_caveat():
-    text = RUNBOOK.read_text()
-
-    assert 'vo_odom_comparison.launch.py' in text
-    assert '/odom/go2' in text
-    assert '/odom/vo' in text
-    assert 'ros2 bag record' in text
-    assert 'analyze_odom_bag' in text
-    assert 'ground truth가 아니다' in text
-```
-
-- [ ] **Step 2: 문서 테스트 RED 확인**
-
-Run:
-
-```bash
-pytest -q \
-  src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py::test_comparison_runbook_has_reproducible_commands_and_caveat
-```
-
-Expected: `VO_ODOM_COMPARISON.md` 누락으로 FAIL.
-
-- [ ] **Step 3: 빌드와 실행 절차 작성**
-
-문서에 다음 명령을 그대로 포함한다.
-
-```bash
-colcon build --symlink-install \
-  --packages-select go2_rtabmap_bridge go2_rtabmap_launch
-source install/setup.bash
-
 ros2 launch go2_rtabmap_launch vo_odom_comparison.launch.py
 ```
 
-실행 전 다음 입력을 확인한다.
-
-```bash
-ros2 topic hz /utlidar/robot_odom
-ros2 topic hz /camera/color/image_raw
-ros2 topic hz /camera/aligned_depth_to_color/image_raw
-ros2 topic echo /camera/color/camera_info --once
-```
-
-출력을 확인한다.
-
-```bash
-ros2 topic hz /odom/go2
-ros2 topic hz /odom/vo
-ros2 topic echo /odom/vo --once
-```
-
-- [ ] **Step 4: rosbag 기록 절차 작성**
-
-빠른 비교용 최소 기록:
-
-```bash
-ros2 bag record \
-  -o bags/vo_go2_compare_minimal \
-  /odom/go2 \
-  /odom/vo
-```
-
-VO 설정을 바꿔 재처리할 수 있는 재현용 기록:
-
-```bash
-ros2 bag record \
-  -o bags/vo_go2_compare_reproducible \
-  /utlidar/robot_odom \
-  /odom/go2 \
-  /odom/vo \
-  /camera/color/image_raw \
-  /camera/aligned_depth_to_color/image_raw \
-  /camera/color/camera_info \
-  /tf \
-  /tf_static
-```
-
-- [ ] **Step 5: 분석과 판독 절차 작성**
-
-```bash
-mkdir -p results
-ros2 run go2_rtabmap_bridge analyze_odom_bag \
-  bags/vo_go2_compare_minimal \
-  --output-prefix results/vo_go2
-```
-
-문서에서 다음 기준을 설명한다.
-
-- `time_gap_p95_ms <= 33 ms`: 30 Hz 카메라 한 프레임 이내의 양호한 비교 동기.
-- `vo_max_gap_sec > 0.5` 또는 `vo_long_gap_count > 0`: tracking loss 또는 VO 출력 중단 후보.
-- `position_difference_*`, `yaw_difference_*`: 두 추정기의 발산량이며 정확도 오차가 아니다.
-- 시작점으로 돌아오는 폐루프 주행에서는 각 odometry의 최종 상대 pose norm도 별도로 확인한다.
-- 정지 구간에서는 VO jitter와 Go2 yaw drift를 구분해 본다.
-- 저특징 직선, 빠른 회전, 정상 속도 전체 루프를 별도 bag으로 기록한다.
-
-- [ ] **Step 6: 문서 테스트 GREEN 확인**
-
-Run:
-
-```bash
-pytest -q \
-  src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py
-```
-
-Expected: 전체 PASS.
-
-- [ ] **Step 7: 실행 문서 커밋**
-
-```bash
-git add \
-  VO_ODOM_COMPARISON.md \
-  src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py
-git commit -m "docs: add VO and Go2 odometry comparison runbook"
-```
-
----
-
-### Task 5: 통합 빌드와 실기 전 검증
-
-**Files:**
-
-- Verify only: Task 1-4에서 생성·수정한 파일
-
-**Interfaces:**
-
-- Produces:
-  - 설치된 `vo_odom_comparison.launch.py`
-  - 설치된 `analyze_odom_bag` executable
-  - 통과한 패키지/단위 테스트 결과
-
-- [ ] **Step 1: 두 패키지 선택 빌드**
-
-Run:
-
-```bash
-colcon build --symlink-install \
-  --packages-select go2_rtabmap_bridge go2_rtabmap_launch
-```
-
-Expected: 두 패키지 build 성공.
-
-- [ ] **Step 2: 설치 공간을 source한 뒤 executable 확인**
-
-Run:
-
-```bash
-source install/setup.bash
-ros2 pkg executables go2_rtabmap_bridge
-```
-
-Expected output에 다음 두 줄이 모두 존재한다.
+RViz에서는 Fixed Frame을 `odom_compare`로 설정하고 두 Odometry display에
+`/odom/go2`, `/odom/vo`를 지정한다. 기존에 수동으로 실행한 다음 두 identity
+static TF publisher는 같은 child frame의 TF가 중복되므로 반드시 종료한다.
 
 ```text
-go2_rtabmap_bridge odom_tf_bridge
-go2_rtabmap_bridge analyze_odom_bag
+odom_compare → go2_odom  (수동 identity TF: 사용하지 않음)
+odom_compare → vo_odom   (수동 identity TF: 사용하지 않음)
 ```
 
-- [ ] **Step 3: 전체 패키지 테스트**
+### 10.6 구현·검증 순서
 
-Run:
-
-```bash
-colcon test \
-  --packages-select go2_rtabmap_bridge go2_rtabmap_launch \
-  --event-handlers console_direct+
-colcon test-result --verbose
-```
-
-Expected: `0 tests failed`.
-
-- [ ] **Step 4: launch 구성 출력 확인**
-
-Run:
-
-```bash
-ros2 launch go2_rtabmap_launch \
-  vo_odom_comparison.launch.py \
-  --show-args
-```
-
-Expected: camera topic, `/odom/go2`, `/odom/vo`, `-0.015`, camera extrinsic 인자가 표시된다.
-
-- [ ] **Step 5: ROS graph 수동 smoke test**
-
-카메라와 Go2가 연결된 환경에서 launch 후 확인한다.
-
-```bash
-ros2 node list
-ros2 topic list
-ros2 topic hz /odom/go2
-ros2 topic hz /odom/vo
-```
-
-Expected:
-
-- `go2_comparison_odom_bridge`, `vo_comparison_rgbd_sync`, `rgbd_vo_comparison`이 존재한다.
-- `/rtabmap/rtabmap` 노드가 존재하지 않는다.
-- `/odom/go2`는 Go2 입력과 유사한 고주파로 발행된다.
-- `/odom/vo`는 카메라 처리율 범위에서 지속적으로 발행된다.
-
-- [ ] **Step 6: TF 중복 여부 확인**
-
-Run:
-
-```bash
-ros2 run tf2_tools view_frames
-```
-
-Expected: 비교 노드가 `go2_odom -> base_link` 또는 `vo_odom -> base_link` TF를 발행하지 않는다. 기존 시스템이 별도로 실행 중이면 그 시스템이 소유한 `odom -> base_link`만 유지된다.
-
-- [ ] **Step 7: 최종 diff 검토**
-
-Run:
-
-```bash
-git status --short
-git diff --check
-git diff -- \
-  src/go2_rtabmap_launch/launch/vo_odom_comparison.launch.py \
-  src/go2_rtabmap_launch/test/test_vo_odom_comparison_launch.py \
-  src/go2_rtabmap_launch/package.xml \
-  src/go2_rtabmap_bridge/go2_rtabmap_bridge/odom_comparison.py \
-  src/go2_rtabmap_bridge/go2_rtabmap_bridge/analyze_odom_bag.py \
-  src/go2_rtabmap_bridge/test/test_odom_comparison.py \
-  src/go2_rtabmap_bridge/test/test_analyze_odom_bag_cli.py \
-  src/go2_rtabmap_bridge/setup.py \
-  src/go2_rtabmap_bridge/package.xml \
-  VO_ODOM_COMPARISON.md
-```
-
-Expected: whitespace error가 없고, 기존 Visual SLAM 파일에는 diff가 없다.
-
-- [ ] **Step 8: 검증 결과만 커밋할 변경이 있는지 확인**
-
-검증 과정에서 코드나 문서 수정이 필요했다면 해당 파일만 명시적으로 stage하고 다음 메시지로 커밋한다.
-
-```bash
-git commit -m "test: verify VO and Go2 odometry comparison workflow"
-```
-
-수정이 없으면 빈 커밋은 만들지 않는다.
-
-## 실기 실험 순서
-
-구현 완료 후 동일한 시작 위치에서 다음 세 bag을 각각 기록한다.
-
-1. **정지 2분**
-   - Go2 yaw drift와 VO 정지 jitter/출력 중단을 확인한다.
-2. **저특징 복도 왕복**
-   - VO feature 부족 시 tracking loss와 재초기화 여부를 확인한다.
-3. **기존 Visual SLAM 검증 경로 전체 루프**
-   - 주행거리 차이, 최종 위치 차이, yaw 발산, VO gap을 비교한다.
-
-각 bag은 독립된 output prefix로 분석한다.
-
-```bash
-ros2 run go2_rtabmap_bridge analyze_odom_bag \
-  bags/vo_go2_stationary \
-  --output-prefix results/stationary
-
-ros2 run go2_rtabmap_bridge analyze_odom_bag \
-  bags/vo_go2_corridor \
-  --output-prefix results/corridor
-
-ros2 run go2_rtabmap_bridge analyze_odom_bag \
-  bags/vo_go2_full_loop \
-  --output-prefix results/full_loop
-```
-
-## 판정 원칙
-
-- GO2와 VO 중 어느 쪽이 더 정확한지는 두 odometry만으로 확정하지 않는다.
-- 먼저 VO가 전 구간에서 끊기지 않고 출력되는지 확인한다.
-- tracking이 유지될 때 두 상대 궤적의 위치·yaw 발산이 어느 동작 구간에서 커지는지 확인한다.
-- 폐루프 최종 pose와 정지 구간 drift는 비교 판단에 활용할 수 있지만 독립 ground truth를 대체하지 않는다.
-- VO가 안정적이면 다음 단계에서만 GO2 odom 대체 또는 sensor fusion 실험 계획을 별도로 작성한다.
+1. 평면 역변환과 첫 timestamp 쌍 선택에 대한 실패 테스트를 작성한다.
+2. 계산 코어와 ROS 2 static TF broadcaster 노드를 최소 구현한다.
+3. 비교 launch 계약 테스트를 먼저 실패시키고 자동 정렬 노드를 연결한다.
+4. bridge·launch 패키지 테스트와 `colcon build`를 수행한다.
+5. 설치된 launch와 console script를 확인한다.

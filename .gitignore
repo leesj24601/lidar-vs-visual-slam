@@ -6,8 +6,6 @@ __pycache__/
 *.py[cod]
 
 maps/
-maps/active/*.db
-maps/active/*.db-*
-maps/sessions/**/*.db
-maps/sessions/**/*.db-*
+maps/active/
+maps/sessions/
 .omx/

@@ -1,0 +1,18 @@
+{
+  "matched_pairs": 1540,
+  "duration_sec": 51.537589844,
+  "time_gap_median_ms": 1.7735720000000001,
+  "time_gap_p95_ms": 3.2140407499999997,
+  "time_gap_max_ms": 30.554049,
+  "go2_path_length_m": 10.348268526114012,
+  "vo_path_length_m": 17.966899655942264,
+  "final_position_difference_m": 0.26530516797224607,
+  "position_difference_rmse_m": 0.23895602697569815,
+  "position_difference_p95_m": 0.3951548165974065,
+  "final_yaw_difference_deg": 1.1070113754375166,
+  "yaw_difference_rmse_deg": 2.2182326478174224,
+  "yaw_difference_p95_deg": 3.9837155972380986,
+  "vo_effective_rate_hz": 29.861783868729212,
+  "vo_max_gap_sec": 0.066719483,
+  "vo_long_gap_count": 0
+}

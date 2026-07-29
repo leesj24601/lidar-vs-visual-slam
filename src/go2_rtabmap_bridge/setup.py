@@ -18,7 +18,12 @@ setup(
     license='MIT',
     entry_points={
         'console_scripts': [
+            'analyze_odom_bag = go2_rtabmap_bridge.analyze_odom_bag:main',
             'bridge_node = go2_rtabmap_bridge.bridge_node:main',
+            (
+                'odom_initial_alignment_tf = '
+                'go2_rtabmap_bridge.odom_initial_alignment_tf:main'
+            ),
             'odom_tf_bridge = go2_rtabmap_bridge.odom_tf_bridge:main',
         ],
     },
