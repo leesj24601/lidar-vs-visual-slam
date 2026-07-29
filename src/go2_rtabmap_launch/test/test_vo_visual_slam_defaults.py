@@ -186,7 +186,7 @@ def test_rgbd_sync_feeds_one_shared_topic_to_vo_and_rtabmap():
     context = _launch_context(description)
     nodes = _nodes_by_name(description)
 
-    _, sync_remappings = _resolved_node(
+    sync_parameters, sync_remappings = _resolved_node(
         nodes['vo_slam_rgbd_sync'],
         context,
     )
@@ -205,6 +205,9 @@ def test_rgbd_sync_feeds_one_shared_topic_to_vo_and_rtabmap():
         'rgb/camera_info': '/camera/color/camera_info',
         'rgbd_image': '/camera/vo_slam/rgbd_image',
     }
+    assert 'queue_size' not in sync_parameters
+    assert sync_parameters['topic_queue_size'] == 20
+    assert sync_parameters['sync_queue_size'] == 20
     assert vo_remappings['rgbd_image'] == sync_remappings['rgbd_image']
     assert rtabmap_remappings['rgbd_image'] == sync_remappings['rgbd_image']
 

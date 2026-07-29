@@ -171,7 +171,7 @@ def generate_launch_description():
             parameters=[{
                 'approx_sync': True,
                 'approx_sync_max_interval': 0.03,
-                'queue_size': 20,
+                'topic_queue_size': 20,
                 'sync_queue_size': 20,
                 'qos_image': 1,
                 'qos_camera_info': 1,
