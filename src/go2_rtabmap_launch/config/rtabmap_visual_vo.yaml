@@ -1,0 +1,54 @@
+/**:
+  ros__parameters:
+    # Inputs
+    frame_id: base_link
+    map_frame_id: map
+    subscribe_rgbd: true
+    subscribe_rgb: false
+    subscribe_depth: false
+    subscribe_scan: false
+    subscribe_scan_cloud: false
+    subscribe_stereo: false
+    subscribe_user_data: false
+    subscribe_odom_info: true
+
+    # Synchronize the shared RGB-D stream with RGB-D visual odometry.
+    approx_sync: true
+    approx_sync_max_interval: 0.03
+    odom_sensor_sync: true
+    wait_for_transform: 0.2
+    topic_queue_size: 100
+    sync_queue_size: 100
+    qos_image: 1
+    qos_camera_info: 1
+    qos_odom: 1
+
+    # Visual registration and loop constraints.
+    "Reg/Strategy": "0"
+    "Reg/Force3DoF": "false"
+    "Kp/DetectorStrategy": "8"
+    "Vis/FeatureType": "8"
+    "Vis/EstimationType": "1"
+    "Vis/MinInliers": "20"
+
+    # Occupancy grid from aligned RGB-D depth.
+    "Grid/FromDepth": "true"
+    "Grid/RangeMin": "0.3"
+    "Grid/RangeMax": "3.0"
+    "Grid/DepthDecimation": "2"
+    "Grid/CellSize": "0.05"
+    "RGBD/CreateOccupancyGrid": "true"
+
+    # Start from the established visual mapping settings, but tune this
+    # independent file separately after the VO SLAM baseline run.
+    "RGBD/OptimizeFromGraphEnd": "false"
+    "RGBD/NeighborLinkRefining": "true"
+    "RGBD/ProximityBySpace": "true"
+    "RGBD/ProximityOdomGuess": "false"
+    "Rtabmap/DetectionRate": "8.0"
+    "RGBD/LinearUpdate": "0.1"
+    "RGBD/AngularUpdate": "0.1"
+
+    # Mapping mode.
+    "Mem/IncrementalMemory": "true"
+    "Mem/InitWMWithAllNodes": "false"

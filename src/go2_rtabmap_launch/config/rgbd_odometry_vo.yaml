@@ -1,0 +1,18 @@
+/**:
+  ros__parameters:
+    # RGB-D odometry owns vo_odom -> base_link in the VO SLAM stack.
+    frame_id: base_link
+    odom_frame_id: vo_odom
+    publish_tf: true
+    subscribe_rgbd: true
+    wait_for_transform: 0.2
+    qos: 1
+    qos_camera_info: 1
+
+    # Keep the validated comparison baseline for the first SLAM run.
+    "Odom/Strategy": "0"
+    "Odom/ResetCountdown": "0"
+    "Vis/FeatureType": "8"
+    "Vis/MinInliers": "20"
+    "Vis/MinDepth": "0.3"
+    "Vis/MaxDepth": "4.0"
