@@ -1,0 +1,36 @@
+diff --git a/realsense2_camera/CMakeLists.txt b/realsense2_camera/CMakeLists.txt
+index f8a66a6..6af2a52 100644
+--- a/realsense2_camera/CMakeLists.txt
++++ b/realsense2_camera/CMakeLists.txt
+@@ -310,9 +310,15 @@ endif()
+ install(FILES "${CMAKE_BINARY_DIR}/global_settings.yaml"
+     DESTINATION share/${PROJECT_NAME}/config)
+ 
+-target_link_libraries(${PROJECT_NAME}
+-  ${targets}
+-)
++if("$ENV{ROS_DISTRO}" STREQUAL "foxy")
++  ament_target_dependencies(${PROJECT_NAME}
++    ${dependencies}
++  )
++else()
++  target_link_libraries(${PROJECT_NAME}
++    ${targets}
++  )
++endif()
+ 
+ rclcpp_components_register_node(${PROJECT_NAME}
+   PLUGIN "realsense2_camera::RealSenseNodeFactory"
+diff --git a/realsense2_camera/include/base_realsense_node.h b/realsense2_camera/include/base_realsense_node.h
+index 065fa67..dfe3267 100755
+--- a/realsense2_camera/include/base_realsense_node.h
++++ b/realsense2_camera/include/base_realsense_node.h
+@@ -45,7 +45,7 @@
+ #include <sensor_msgs/msg/image.hpp>
+ #include <sensor_msgs/msg/imu.hpp>
+ 
+-#if defined(HUMBLE) || defined(IRON) || defined(JAZZY) 
++#if defined(FOXY) || defined(HUMBLE) || defined(IRON) || defined(JAZZY)
+ #include <tf2/LinearMath/Quaternion.h>
+ #else
+ #include <tf2/LinearMath/Quaternion.hpp>
