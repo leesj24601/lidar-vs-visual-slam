@@ -25,6 +25,10 @@ setup(
                 'go2_rtabmap_bridge.odom_initial_alignment_tf:main'
             ),
             'odom_tf_bridge = go2_rtabmap_bridge.odom_tf_bridge:main',
+            (
+                'probe_realsense_imu = '
+                'go2_rtabmap_bridge.realsense_imu_probe:main'
+            ),
         ],
     },
 )
