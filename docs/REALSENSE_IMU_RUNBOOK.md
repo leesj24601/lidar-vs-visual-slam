@@ -12,7 +12,7 @@ Go2의 기존 RealSense 환경은 유지되고, 신규 환경이 별도 경로�
 | realsense_ros | 4.54.1 | 4.56.4 + Foxy 호환 patch |
 | workspace | `~/ros2_realsense_ws` | `~/ros2_realsense_456_ws` |
 | SDK backend | 기존 설치값 | native V4L2/HID |
-| 외부 DDS | 기존 설정 | FastDDS + 전용 Ethernet profile |
+| DDS | 기존 CycloneDDS | 기존 CycloneDDS 설정을 그대로 사용 |
 | 카메라 펌웨어 | 5.17.0.10 | 변경하지 않음 |
 
 신규 SDK와 wrapper 경로:
@@ -25,32 +25,57 @@ Go2의 기존 RealSense 환경은 유지되고, 신규 환경이 별도 경로�
 ```
 
 시스템 SDK, 커널, DKMS, udev rule, 펌웨어와 기존 workspace는 변경하지
-않는다. 기존 환경과 신규 환경을 같은 shell에서 차례로 source하지 말고 항상
-새 shell을 사용한다.
+않는다. 기존 RealSense workspace와 신규 RealSense workspace를 같은
+shell에서 차례로 source하지 말고 항상 새 shell을 사용한다. DDS는 별도의
+카메라 구성요소가 아니므로 기존 Go2 CycloneDDS 환경을 그대로 유지한다.
 
 ## 신규 환경 실행
 
-Go2에 접속한 새 shell에서 다음 한 줄을 실행한다.
+Go2에 접속한 새 대화형 shell에서 기존 시작 메뉴의 `1`번(Foxy)을 선택한
+뒤 다음 한 줄을 실행한다.
 
 ```bash
 source /home/unitree/ros2_realsense_456_ws/activate.bash
 ```
 
-이 스크립트는 다음 순서로 환경을 구성한다.
+Go2의 기존 `.bashrc`가 `1`번 선택 시 다음 DDS 환경을 이미 구성한다.
 
-1. `/opt/ros/foxy/setup.bash`
-2. librealsense 2.56.5의 `bin`, CMake prefix, library path
-3. `/home/unitree/ros2_realsense_456_ws/install/local_setup.bash`
-4. `rmw_fastrtps_cpp`와 Go2 `eth0` 전용 FastDDS profile
+```text
+RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+CYCLONEDDS_URI=/home/unitree/cyclonedds_ws/cyclonedds.xml
+```
+
+`activate.bash`는 이 두 값을 수정하거나 다시 설정하지 않는다. 이미 Foxy가
+활성화되어 있으면 그 환경을 보존하고 다음 두 항목만 추가한다.
+
+1. librealsense 2.56.5의 `bin`, CMake prefix, library path
+2. `/home/unitree/ros2_realsense_456_ws/install/local_setup.bash`
+
+ROS 환경이 전혀 없는 shell에서는 편의를 위해 `/opt/ros/foxy/setup.bash`도
+먼저 source하지만, DDS 구현체는 임의로 고르지 않는다.
 
 환경이 올바른지 확인하려면 다음을 실행한다.
 
 ```bash
+echo "$RMW_IMPLEMENTATION"
+echo "$CYCLONEDDS_URI"
 rs-enumerate-devices --version
 ros2 pkg xml realsense2_camera | grep -m1 '<version>'
 ```
 
-예상 버전은 각각 `2.56.5.0`, `4.56.4`다.
+예상 DDS는 `rmw_cyclonedds_cpp`, SDK와 wrapper 버전은 각각 `2.56.5.0`,
+`4.56.4`다.
+
+SSH 비대화형 명령이나 systemd처럼 `.bashrc` 시작 메뉴를 거치지 않는
+실행에서는 CycloneDDS 환경을 먼저 명시적으로 구성해야 한다.
+
+```bash
+source /opt/ros/foxy/setup.bash
+source /home/unitree/cyclonedds_ws/install/setup.bash
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export CYCLONEDDS_URI=/home/unitree/cyclonedds_ws/cyclonedds.xml
+source /home/unitree/ros2_realsense_456_ws/activate.bash
+```
 
 ## RGB-D와 IMU launch
 
@@ -99,35 +124,33 @@ orientation 값이 0이고 `orientation_covariance[0] == -1`인 것은 정상이
 
 ## 외부 Humble PC에서 받기
 
-PC에는 NIC가 두 개 있으므로 기본 DDS 설정을 사용하면 인터넷 NIC와 Go2
-전용 NIC 사이에서 discovery가 불안정하고 대용량 image가 전달되지 않았다.
-Go2 카메라 launch에는 활성화 스크립트가
-`config/fastdds_go2.xml`에 대응하는 원격 profile을 자동 적용한다. PC에서는
-저장소 루트의 `config/fastdds_pc.xml`을 적용한다.
+Go2와 PC 모두 기존 CycloneDDS를 사용한다. PC의 `cyclone` alias는
+`enx00e04c361d3a` 인터넷 인터페이스만 강제로 선택하므로 Go2 카메라를 받을
+때는 실행하지 않는다. 기본 CycloneDDS interface 선택 상태에서 Go2 전용
+유선 인터페이스 `eno1`을 통해 정상 수신되는 것을 확인했다.
 
 ```bash
 cd /home/cvr/Desktop/sj/go2_lidar_slam
 source /opt/ros/humble/setup.bash
-export RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export FASTRTPS_DEFAULT_PROFILES_FILE="$PWD/config/fastdds_pc.xml"
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+unset CYCLONEDDS_URI
 export ROS_DOMAIN_ID=0
 export ROS_LOCALHOST_ONLY=0
 
-# 이전 CycloneDDS daemon이 있으면 middleware 변경 전에 한 번 종료한다.
+# 이전 DDS 환경에서 시작한 daemon이 있으면 새 환경으로 다시 띄운다.
 ros2 daemon stop || true
 ros2 topic list | grep '^/camera/'
 ```
 
-검증된 외부 수신 결과는 컬러 `29.978 Hz`, 정렬 깊이 `29.978 Hz`, 통합
-IMU `199.558 Hz`다. PC나 Go2의 `192.168.123.*` 주소 또는 NIC 구성이
-변경되면 두 XML의 whitelist 주소도 함께 갱신해야 한다.
+검증된 외부 수신 결과는 컬러와 정렬 깊이 각각 약 `29.75 Hz`, 통합 IMU
+`199.57 Hz`다. 이때 PC에서는 `cyclone` alias를 실행하지 않았고 Go2에서는
+기존 `cyclonedds.xml`을 사용했다.
 
-Foxy의 `libfastrtps.so.2.1.4`는 다른 DDS participant가 남은 상태에서
-discovery를 시작할 때 `bad_alloc caught: std::bad_alloc`을 일시적으로
-출력할 수 있었다. 이 문자열의 출처는 카메라 SDK가 아니라 FastDDS였고,
-검증 당시 메모리는 5.9 GiB available이었으며 위 수신률에는 영향이 없었다.
-계속 반복되거나 토픽이 보이지 않으면 양쪽 ROS daemon을 종료하고 두
-FastDDS profile을 적용한 새 shell에서 다시 시작한다.
+이전에 보인 반복적인 `bad_alloc caught: std::bad_alloc`은 카메라 SDK의
+메모리 부족이 아니라 임시 FastDDS 시험에서 Foxy의
+`libfastrtps.so.2.1.4`가 출력한 메시지였다. 위 CycloneDDS 환경으로 정확히
+실행한 시험에서는 나타나지 않았다. 같은 메시지가 다시 보이면 새 shell에서
+`echo "$RMW_IMPLEMENTATION"`이 `rmw_cyclonedds_cpp`인지 먼저 확인한다.
 
 ## IMU 값 검증
 
@@ -156,10 +179,10 @@ probe의 1차 합격 기준:
 
 ## 기존 환경으로 복귀
 
-신규 환경을 source했던 shell을 재사용하지 말고 새 shell을 연다.
+신규 환경을 source했던 shell을 재사용하지 말고 새 SSH shell을 열어 시작
+메뉴의 `1`번(Foxy)을 선택한 뒤 기존 workspace만 source한다.
 
 ```bash
-source /opt/ros/foxy/setup.bash
 source /home/unitree/ros2_realsense_ws/install/local_setup.bash
 ```
 
