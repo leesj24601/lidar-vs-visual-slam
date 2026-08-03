@@ -36,13 +36,16 @@
     "Vis/EstimationType": "1"
     "Vis/MinInliers": "20"
 
-    # Occupancy grid from aligned RGB-D depth.
-    "Grid/FromDepth": "true"
+    # Build a 2D local occupancy grid from aligned RGB-D depth. Ray tracing
+    # preserves observed free space between the camera and obstacle cells.
+    "RGBD/CreateOccupancyGrid": "true"
+    "Grid/Sensor": "1"
+    "Grid/3D": "false"
+    "Grid/RayTracing": "true"
     "Grid/RangeMin": "0.3"
     "Grid/RangeMax": "3.0"
     "Grid/DepthDecimation": "2"
     "Grid/CellSize": "0.05"
-    "RGBD/CreateOccupancyGrid": "true"
 
     # Keep the validated PnP neighbor and spatial-proximity graph settings.
     # The finalized 8 Hz rate (125 ms) passed the controlled 5-to-8 Hz and

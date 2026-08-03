@@ -36,9 +36,10 @@ The project focuses on the difficult integration layer between Go2 bare DDS topi
 - [Modules](#modules)
   - [1. Go2 RTAB-Map Bridge](#1-go2-rtab-map-bridge)
   - [2. LiDAR Mapping](#2-lidar-mapping)
-  - [3. Map-Based Localization](#3-map-based-localization)
-  - [4. Control Dashboard](#4-control-dashboard)
-  - [5. Diagnostics & Testing](#5-diagnostics--testing)
+  - [3. Go2 Odom + RGB-D Visual Mapping](#3-go2-odom--rgb-d-visual-mapping)
+  - [4. Map-Based Localization](#4-map-based-localization)
+  - [5. Control Dashboard](#5-control-dashboard)
+  - [6. Diagnostics & Testing](#6-diagnostics--testing)
 - [Reference Documents](#reference-documents)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
@@ -275,7 +276,42 @@ Mapping outputs:
 | `/rtabmap/mapGraph` | Pose graph |
 | `/rtabmap/info` | Statistics and loop-closure information |
 
-### 3. Map-Based Localization
+### 3. Go2 Odom + RGB-D Visual Mapping
+
+This path uses the Go2 built-in odometry as the motion input and aligned
+RealSense RGB-D data to create a Nav2-oriented 2D occupancy grid. Start the
+first test with a new database so every node gets a local grid made with the
+current 2D ray-tracing settings:
+
+```bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch go2_rtabmap_launch visual_slam.launch.py \
+  database_path:=maps/visual/2d_occupancy_test/rtabmap.db \
+  reset_db:=true
+```
+
+The active occupancy settings are `RGBD/CreateOccupancyGrid=true`,
+`Grid/Sensor=1` (depth), `Grid/3D=false` (2D local grids), and
+`Grid/RayTracing=true` (observed free-space clearing). Reusing a database made
+with previous grid settings can retain its stored local grids; use a fresh
+database when comparing map quality.
+
+Use `map` as the RViz fixed frame and distinguish the three outputs below:
+
+| RViz display | Topic | Meaning |
+|--------------|-------|---------|
+| `rviz_default_plugins/Map` | `/rtabmap/map` | Final 2D `nav_msgs/OccupancyGrid`; this is the candidate map for Nav2. |
+| `rviz_default_plugins/PointCloud2` | `/rtabmap/cloud_map` | Ground/obstacle cells assembled from the occupancy local grids; with `Grid/3D=false`, this cloud can be flattened. |
+| `rtabmap_rviz_plugins/MapCloud` | `/rtabmap/mapData` | RGB-D point clouds reconstructed from RTAB-Map graph data for 3D inspection; it is not `/rtabmap/cloud_map`. |
+
+The 2D map is generated alongside graph/RGB-D mapping. It is not a simple
+projection of the final visualized 3D cloud: local ray tracing records both
+occupied endpoints and the free space observed between the camera and those
+endpoints.
+
+### 4. Map-Based Localization
 
 Localization reuses an existing RTAB-Map database:
 
@@ -305,7 +341,7 @@ ros2 node info /rtabmap/rtabmap
 
 Current limitation: the LiDAR-only RTAB-Map configuration behaves best as a known-start localization baseline. Fully robust kidnapped/global relocalization is planned as a separate Scan Context + ICP PoC.
 
-### 4. Control Dashboard
+### 5. Control Dashboard
 
 The dashboard provides a browser UI for mapping and localization control.
 
@@ -338,7 +374,7 @@ python3 -m http.server 8080
 
 See [`dashboard/README.md`](dashboard/README.md) for API details.
 
-### 5. Diagnostics & Testing
+### 6. Diagnostics & Testing
 
 Build and test:
 
