@@ -30,10 +30,16 @@ ros2 launch go2_rtabmap_launch slam.launch.py \
   rtabmap_viz:=true
 ```
 
-## Visual SLAM
+## Go2 Odometry 기반 Visual SLAM
 
 ```bash
 ros2 launch go2_rtabmap_launch visual_slam.launch.py \
   reset_db:=true \
   rtabmap_viz:=true
+```
+
+## VO 기반 Visual SLAM
+
+```bash
+ros2 launch go2_rtabmap_launch vo_visual_slam.launch.py reset_db:=true
 ```
