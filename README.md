@@ -1,124 +1,65 @@
 <div align="center">
-  <h1>Go2 LiDAR SLAM</h1>
+  <h1>Go2 LiDAR & Visual SLAM</h1>
   <img src="https://img.shields.io/badge/ROS2-Humble-blue?style=flat&logo=ros&logoColor=white" alt="ROS 2 Humble">
   <img src="https://img.shields.io/badge/Ubuntu-22.04-E95420?style=flat&logo=ubuntu&logoColor=white" alt="Ubuntu 22.04">
-  <img src="https://img.shields.io/badge/RTAB--Map-LiDAR_SLAM-7C3AED?style=flat" alt="RTAB-Map LiDAR SLAM">
+  <img src="https://img.shields.io/badge/RTAB--Map-SLAM-7C3AED?style=flat" alt="RTAB-Map">
   <img src="https://img.shields.io/badge/Unitree-Go2-111827?style=flat" alt="Unitree Go2">
-  <img src="https://img.shields.io/badge/Python-3-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3">
-  <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat" alt="License">
-  <p>ROS 2 and RTAB-Map based LiDAR SLAM pipeline for the Unitree Go2.</p>
+  <p>Unitree Go2에서 LiDAR, Go2 odom + RGB-D, 순수 RGB-D를 비교·운용하는 ROS 2 SLAM 프로젝트</p>
+  <p><em>ROS 2 SLAM workspace for LiDAR, Go2-odometry RGB-D, and pure RGB-D mapping on the Unitree Go2.</em></p>
 </div>
 
-<p align="center">
-  <a href="README.ko.md">
-    <img src="https://img.shields.io/badge/README-KO%20%E2%86%90%20CLICK!-blue?style=for-the-badge" alt="한국어 README로 이동" height="44">
-  </a>
-</p>
+## 프로젝트 개요
 
----
+이 저장소는 Unitree Go2와 RealSense를 RTAB-Map에 연결해 세 가지 SLAM 경로를
+실기에서 비교하고 운용한다. Go2 전용 DDS message를 단순히 launch하는 데 그치지 않고,
+timestamp epoch 보정, QoS, TF 소유권, padding이 있는 PointCloud2 변환, RGB-D 동기화,
+DB 기반 localization과 Visual Nav2까지 포함한다.
 
-## Overview
+## 세 SLAM 모듈
 
-**Go2 LiDAR SLAM** is a real-hardware ROS 2 pipeline that connects the Unitree Go2's built-in LiDAR odometry and deskewed point cloud streams to **RTAB-Map** for indoor 3D LiDAR mapping and map-based localization.
+| 모듈 | odometry | RTAB-Map 입력 | 기본 DB | 현재 지원 범위 |
+|---|---|---|---|---|
+| LiDAR SLAM | Go2 `/utlidar/robot_odom` | `/odom` + `/scan_cloud` | `maps/active/rtabmap.db` | mapping, known-start 중심 localization |
+| Go2 odom 기반 Visual SLAM | Go2 `/utlidar/robot_odom` | `/odom` + RGB-D | `maps/visual/active/rtabmap.db` | mapping, localization, Nav2 |
+| 순수 Visual SLAM | RTAB-Map RGB-D VO | `/odom/vo` + RGB-D + odom info | `maps/visual_vo/active/rtabmap.db` | mapping, Go2 odom 비교 |
 
-The project focuses on the difficult integration layer between Go2 bare DDS topics and standard ROS 2 SLAM tools: timestamp correction, QoS compatibility, TF publication, PointCloud2 frame conversion, RTAB-Map launch configuration, map database management, and repeatable diagnostics. It is also structured so that a future **Visual SLAM** track can be added and compared against the current LiDAR SLAM baseline.
+TF의 지역 odometry edge는 모듈별로 한 노드만 소유한다.
 
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [System Architecture](#system-architecture)
-- [Project Roadmap](#project-roadmap)
-- [Prerequisites](#prerequisites)
-- [Installation & Setup](#installation--setup)
-- [Project Structure](#project-structure)
-- [Modules](#modules)
-  - [1. Go2 RTAB-Map Bridge](#1-go2-rtab-map-bridge)
-  - [2. LiDAR Mapping](#2-lidar-mapping)
-  - [3. Go2 Odom + RGB-D Visual Mapping](#3-go2-odom--rgb-d-visual-mapping)
-  - [4. Map-Based Localization](#4-map-based-localization)
-  - [5. Control Dashboard](#5-control-dashboard)
-  - [6. Diagnostics & Testing](#6-diagnostics--testing)
-- [Reference Documents](#reference-documents)
-- [Acknowledgements](#acknowledgements)
-- [License](#license)
-
----
-
-## System Architecture
-
-The stack turns Go2-specific sensor streams into RTAB-Map-compatible ROS 2 inputs. The bridge keeps the relative timing between odometry and point clouds, publishes the missing `odom -> base_link` TF, and converts the deskewed cloud into the `base_link` frame before RTAB-Map consumes it.
-
-```mermaid
-flowchart TB
-    GO2["Unitree Go2 LiDAR streams<br/>/utlidar/robot_odom<br/>/utlidar/cloud_deskewed"]
-    BRIDGE["go2_rtabmap_bridge<br/>timestamp correction · TF · cloud transform"]
-    INPUTS["Normalized ROS 2 inputs<br/>/odom · /tf · /scan_cloud"]
-
-    subgraph RTAB["RTAB-Map LiDAR SLAM"]
-        direction LR
-        MAP["Mapping"]
-        DB[("maps/active/rtabmap.db")]
-        LOCAL["Localization"]
-        MAP --> DB --> LOCAL
-    end
-
-    GO2 --> BRIDGE --> INPUTS --> MAP
-    INPUTS -. live odom / scan .-> LOCAL
-
-    classDef source fill:#eef6ff,stroke:#2563eb,color:#0f172a
-    classDef bridge fill:#f8fafc,stroke:#64748b,color:#0f172a
-    classDef topic fill:#ecfeff,stroke:#0891b2,color:#0f172a
-    classDef slam fill:#f0fdf4,stroke:#16a34a,color:#0f172a
-    classDef db fill:#fff7ed,stroke:#f97316,color:#0f172a
-    class GO2 source
-    class BRIDGE bridge
-    class INPUTS topic
-    class MAP,LOCAL slam
-    class DB db
-    style RTAB fill:#f8fafc,stroke:#cbd5e1,color:#0f172a
+```text
+LiDAR / Go2 odom Visual: map -> odom -> base_link -> sensor
+Pure Visual:             map -> vo_odom -> base_link -> camera
 ```
 
----
+세 모듈의 데이터 흐름과 차이는 [시스템 아키텍처](docs/ARCHITECTURE.md)에 자세히
+정리돼 있다.
 
-## Project Roadmap
+## 문서
 
-- [x] **Phase 1: Project scaffold and Go2 reference capture**
-  - ROS 2 package layout, Go2 topic reference, and SLAM design notes.
-- [x] **Phase 2: Go2 RTAB-Map bridge**
-  - `/utlidar/robot_odom` to `/odom` republishing.
-  - `odom -> base_link` TF publication.
-  - `/utlidar/cloud_deskewed` to `/scan_cloud` conversion.
-- [x] **Phase 3: RTAB-Map LiDAR mapping**
-  - Indoor LiDAR-only RTAB-Map configuration.
-  - Database creation under `maps/active/rtabmap.db`.
-- [x] **Phase 4: Map-based localization**
-  - Existing RTAB-Map DB loading.
-  - Optional initial pose support.
-- [x] **Phase 5: Real Go2 verification**
-  - Bridge, mapping, map topic publication, and localization pose output verified on physical Go2 hardware.
-- [x] **Phase 6: Web dashboard prototype**
-  - Browser-based mapping/localization control surface with a Python backend.
-- [ ] **Phase 7: Known-start localization stabilization**
-  - `ALIGN -> LOCK -> TRACKING` workflow for stable known-start localization.
-- [ ] **Phase 8: Global relocalization PoC**
-  - Scan Context + ICP candidate validation for more robust relocalization.
-- [ ] **Phase 9: Visual SLAM comparison track**
-  - Add a Visual SLAM baseline and compare LiDAR SLAM vs Visual SLAM on the same Go2 platform.
+프로젝트를 다시 볼 때는 아래 여섯 문서만 먼저 보면 된다.
 
----
+| 문서 | 내용 |
+|---|---|
+| [README](README.md) | 프로젝트 요약과 최소 실행 예시 |
+| [ARCHITECTURE](docs/ARCHITECTURE.md) | 세 모듈의 데이터 흐름, TF, 패키지 책임과 설계 결정 |
+| [OPERATIONS](docs/OPERATIONS.md) | 설치, 빌드, mapping/localization/Nav2, DB와 bag 운용 |
+| [GO2_REFERENCE](docs/GO2_REFERENCE.md) | Go2 원천 topic, QoS, TF와 센서 특성 원본 및 구현 보충 |
+| [VALIDATION](docs/VALIDATION.md) | 테스트, DB·bag 산출물, 실험 수치와 해석 범위 |
+| [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) | 증상별 원인, 조치와 확인 명령 |
 
-## Prerequisites
+`docs/superpowers/`는 당시 구현 계획과 설계 기록이므로 참고용으로 보존한다. 현재 동작은
+위 핵심 문서와 실제 코드를 기준으로 판단한다. SLAM 도구 선정 배경은
+[ADR 001](docs/adr/001-slam-tool-selection.md)에 남아 있다.
 
-- **OS**: Ubuntu 22.04 LTS
-- **ROS 2**: Humble Hawksbill
-- **SLAM**: `rtabmap_ros` / `rtabmap_slam`
-- **Robot**: Unitree Go2 connected to the same DDS network
-- **Python**: Python 3
-- **Optional movement control**: a separate Go2 ROS 2 workspace such as `/home/cvr/Desktop/sj/go2_ws`
+## 요구 환경
 
-Go2 DDS topics may not appear in the ROS daemon cache. Prefer `--no-daemon` when checking raw Go2 topics.
+- Ubuntu 22.04
+- ROS 2 Humble
+- `rtabmap_ros`
+- 같은 DDS 네트워크의 Unitree Go2
+- Go2 odom Visual·순수 Visual용 RealSense aligned RGB-D
+- Unitree message와 RobotModel용 `go2_ws`
+
+Go2 raw topic은 ROS daemon cache에 나타나지 않을 수 있다.
 
 ```bash
 ros2 topic list --no-daemon
@@ -126,375 +67,165 @@ ros2 topic info /utlidar/robot_odom --verbose --no-daemon
 ros2 topic info /utlidar/cloud_deskewed --verbose --no-daemon
 ```
 
----
-
-## Installation & Setup
-
-1. **Clone the repository**:
-
-   ```bash
-   git clone https://github.com/leesj24601/go2_lidar_slam.git
-   cd go2_lidar_slam
-   ```
-
-2. **Source ROS 2**:
-
-   ```bash
-   source /opt/ros/humble/setup.bash
-   ```
-
-3. **Install ROS dependencies**:
-
-   ```bash
-   sudo apt update
-   sudo apt install ros-humble-rtabmap-ros
-   rosdep install --from-paths src --ignore-src -r -y
-   ```
-
-4. **Build the workspace**:
-
-   ```bash
-   colcon build --symlink-install
-   source install/setup.bash
-   ```
-
-5. **Source the Unitree support workspace before this workspace**:
-
-   The Nav2 Sport bridge and live RobotModel use `unitree_api`, `unitree_go`
-   and `go2_description` from `go2_ws`. Source in this exact order when
-   building or running the visual navigation mode:
-
-   ```bash
-   source /opt/ros/humble/setup.bash
-   source /home/cvr/Desktop/sj/go2_ws/install/setup.bash
-   source /home/cvr/Desktop/sj/go2_lidar_slam/install/setup.bash
-   ```
-
-   Do not start the combined `go2_driver` or `go2_bringup`; this project uses
-   only their installed message definitions and robot description assets.
-
----
-
-## Project Structure
-
-```text
-go2_lidar_slam/
-├── COMMANDS.md                         # Short command notes
-├── SLAM_PLAN.md                        # Detailed implementation plan
-├── STATUS.md                           # Current project status and verification notes
-├── dashboard/                          # Static Web UI and Python control backend
-├── docs/
-│   ├── GO2_REFERENCE.md                # Go2 topic, TF, QoS, and timestamp reference
-│   ├── RUNBOOK.md                      # Build, mapping, localization, and diagnosis workflow
-│   ├── TROUBLESHOOTING.md              # Integration issues and fixes
-│   └── adr/
-│       └── 001-slam-tool-selection.md  # Architecture decision record
-├── maps/
-│   ├── active/                         # Active RTAB-Map DB location
-│   ├── backups/                        # Backed-up active DBs
-│   └── sessions/                       # Session-specific RTAB-Map DBs
-└── src/
-    ├── go2_nav2_bringup/               # Visual mapping/localization + Nav2 modes
-    ├── go2_nav2_control/               # Sport command and LowState joint bridges
-    ├── go2_rtabmap_bridge/             # Go2 sensor bridge package
-    └── go2_rtabmap_launch/             # RTAB-Map launch/config package
-```
-
----
-
-> [!IMPORTANT]
-> **Execution Rule**: Run the commands below from the project root directory unless another directory is explicitly shown.
-
-## Modules
-
-### 1. Go2 RTAB-Map Bridge
-
-The bridge node converts Go2-specific LiDAR streams into RTAB-Map inputs:
-
-| Input | Output | Purpose |
-|------|--------|---------|
-| `/utlidar/robot_odom` | `/odom` | Correct timestamp and republish odometry |
-| `/utlidar/robot_odom` | `/tf` | Publish `odom -> base_link` |
-| `/utlidar/cloud_deskewed` | `/scan_cloud` | Correct timestamp and transform cloud into `base_link` |
-
-Run the bridge by itself:
+## 설치와 빌드
 
 ```bash
+git clone https://github.com/leesj24601/lidar-vs-visual-slam.git go2_lidar_slam
+cd go2_lidar_slam
+
 source /opt/ros/humble/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
 source install/setup.bash
-ros2 run go2_rtabmap_bridge bridge_node
 ```
 
-Verify bridge output in another terminal:
-
-```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 topic hz /odom
-ros2 topic hz /scan_cloud
-ros2 run tf2_ros tf2_echo odom base_link
-```
-
-Expected real-hardware rates:
-
-- `/odom`: about 150 Hz
-- `/scan_cloud`: about 14.7 Hz
-- `tf2_echo odom base_link`: continuous transform output
-
-### 2. LiDAR Mapping
-
-Start RTAB-Map mapping with the default active database path:
-
-```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 launch go2_rtabmap_launch slam.launch.py
-```
-
-Use an explicit database path:
-
-```bash
-ros2 launch go2_rtabmap_launch slam.launch.py \
-  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/active/rtabmap.db
-```
-
-Start a fresh map by deleting the selected DB and SQLite sidecar files:
-
-```bash
-ros2 launch go2_rtabmap_launch slam.launch.py reset_db:=true
-```
-
-Enable visualization when needed:
-
-```bash
-ros2 launch go2_rtabmap_launch slam.launch.py rviz:=true
-ros2 launch go2_rtabmap_launch slam.launch.py rtabmap_viz:=true
-ros2 launch go2_rtabmap_launch slam.launch.py rviz:=true rtabmap_viz:=true
-```
-
-Mapping outputs:
-
-| Output | Purpose |
-|--------|---------|
-| `maps/active/rtabmap.db` | Saved RTAB-Map database |
-| `/rtabmap/mapData` | RTAB-Map update data |
-| `/rtabmap/cloud_map` | Accumulated 3D cloud map |
-| `/rtabmap/map` | 2D occupancy grid output |
-| `/rtabmap/mapGraph` | Pose graph |
-| `/rtabmap/info` | Statistics and loop-closure information |
-
-### 3. Go2 Odom + RGB-D Visual Mapping
-
-This path uses the Go2 built-in odometry as the motion input and aligned
-RealSense RGB-D data to create a Nav2-oriented 2D occupancy grid. Start the
-first test with a new database so every node gets a local grid made with the
-current 2D ray-tracing settings:
-
-```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 launch go2_rtabmap_launch visual_slam.launch.py \
-  database_path:=maps/visual/2d_occupancy_test/rtabmap.db \
-  reset_db:=true
-```
-
-The active occupancy settings are `RGBD/CreateOccupancyGrid=true`,
-`Grid/Sensor=1` (depth), `Grid/3D=false` (2D local grids), and
-`Grid/RayTracing=true` (observed free-space clearing). Reusing a database made
-with previous grid settings can retain its stored local grids; use a fresh
-database when comparing map quality.
-
-Use `map` as the RViz fixed frame and distinguish the three outputs below:
-
-| RViz display | Topic | Meaning |
-|--------------|-------|---------|
-| `rviz_default_plugins/Map` | `/rtabmap/map` | Final 2D `nav_msgs/OccupancyGrid`; this is the candidate map for Nav2. |
-| `rviz_default_plugins/PointCloud2` | `/rtabmap/cloud_map` | Ground/obstacle cells assembled from the occupancy local grids; with `Grid/3D=false`, this cloud can be flattened. |
-| `rtabmap_rviz_plugins/MapCloud` | `/rtabmap/mapData` | RGB-D point clouds reconstructed from RTAB-Map graph data for 3D inspection; it is not `/rtabmap/cloud_map`. |
-
-The 2D map is generated alongside graph/RGB-D mapping. It is not a simple
-projection of the final visualized 3D cloud: local ray tracing records both
-occupied endpoints and the free space observed between the camera and those
-endpoints.
-
-#### Explicit Visual Mapping and Navigation Modes
-
-For the Go2-internal-odometry visual path, use the two top-level modes below.
-Both assume that the RealSense aligned color/depth topics are already running.
-
-Mapping mode is driven with the official Unitree controller. It starts neither
-Nav2 nor the PC Sport-command bridge:
+Unitree package가 필요한 build와 실행에서는 overlay를 아래 순서로 source한다.
 
 ```bash
 source /opt/ros/humble/setup.bash
 source /home/cvr/Desktop/sj/go2_ws/install/setup.bash
-source install/setup.bash
-
-ros2 launch go2_nav2_bringup visual_mapping_mode.launch.py \
-  database_path:=maps/visual/active/rtabmap.db \
-  reset_db:=true
+source /home/cvr/Desktop/sj/go2_lidar_slam/install/setup.bash
 ```
 
-Navigation mode opens that visual RTAB-Map database with incremental mapping
-disabled. RTAB-Map remains the localization source and publishes `map -> odom`;
-AMCL and `nav2_map_server` are not launched. The default below leaves the Sport
-bridge disabled, starts RViz, and displays the live Go2 URDF pose from
-`/lowstate`. It is suitable for checking localization, TF, costmaps and
-planning without moving Go2:
+이 프로젝트는 `go2_ws`의 설치된 message와 description을 사용한다. 별도 통합
+`go2_driver`/`go2_bringup` launch를 동시에 실행해 sensor 또는 TF publisher를
+중복시키지 않는다.
+
+## 빠른 실행
+
+모든 명령은 저장소 루트에서 실행한다. 실제 운용 인자와 검증 명령은
+[OPERATIONS](docs/OPERATIONS.md)를 따른다.
+
+### 1. LiDAR SLAM
+
+Mapping:
+
+```bash
+ros2 launch go2_rtabmap_launch slam.launch.py \
+  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/active/rtabmap.db \
+  rviz:=true
+```
+
+기존 DB localization:
+
+```bash
+ros2 launch go2_rtabmap_launch localization.launch.py \
+  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/active/rtabmap.db \
+  rviz:=true
+```
+
+LiDAR-only localization은 비슷한 구조의 false ICP match에 취약하므로 가능한 한
+`initial_pose`를 주고, pose topic뿐 아니라 현재 scan과 저장 map이 실제 위치에서
+겹치는지 확인한다.
+
+### 2. Go2 odom 기반 Visual SLAM
+
+RealSense color, aligned depth와 color CameraInfo가 먼저 발행되고 있어야 한다.
+
+Mapping 전용 상위 모드:
+
+```bash
+ros2 launch go2_nav2_bringup visual_mapping_mode.launch.py \
+  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/visual/active/rtabmap.db
+```
+
+기존 DB localization + Nav2 안전 점검:
 
 ```bash
 ros2 launch go2_nav2_bringup visual_navigation_mode.launch.py \
-  database_path:=maps/visual/active/rtabmap.db \
+  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/visual/active/rtabmap.db \
   enable_motion:=false \
   rviz:=true \
   show_robot_model:=true \
   lowstate_topic:=/lowstate
 ```
 
-The read-only `lowstate_joint_state_bridge` converts the first 12 Go2 motor
-states to `/joint_states`. `robot_state_publisher` loads
-`go2_description.urdf`, whose root is `base_link` and which does not define an
-`odom` link. This preserves the existing `map -> odom -> base_link` ownership.
-Check the live model and localization chain with:
+이 모드는 RTAB-Map이 `/rtabmap/map`과 `map -> odom`을 제공하고, aligned depth를
+`/scan`으로 바꿔 Nav2 obstacle source로 사용한다. AMCL과 `nav2_map_server`는 시작하지
+않는다. `/lowstate`는 읽기 전용 joint bridge를 거쳐 `/joint_states`가 되고,
+`go2_description.urdf`의 live RobotModel을 표시한다.
+
+먼저 `enable_motion:=false`로 localization, TF, costmap, MPPI path와 RobotModel을 모두
+검증한다. 주변을 비우고 비상 정지 수단과 운용자를 준비한 실기 시험에서만
+`enable_motion:=true`를 명시한다. Sport bridge는 `/cmd_vel`을 제한해 Move API 1008로
+보내며, zero·비정상·0.30초 stale command에는 StopMove API 1003을 보낸다.
+
+### 3. 순수 Visual SLAM
 
 ```bash
-ros2 topic hz /joint_states
-ros2 run tf2_ros tf2_echo base_link FL_hip
-ros2 run tf2_ros tf2_echo map base_link
+ros2 launch go2_rtabmap_launch vo_visual_slam.launch.py \
+  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/visual_vo/active/rtabmap.db \
+  rviz:=true
 ```
 
-Use `rviz:=false` when attaching a separately configured RViz instance, or
-`show_robot_model:=false` when only map and Nav2 processes are required.
+이 경로는 Go2 odom을 사용하지 않고 `rgbd_odometry`가 `/odom/vo`와
+`vo_odom -> base_link`를 만든다. 현재는 mapping 전용이며 별도 localization·Nav2
+launch는 없다.
 
-Only after a motion-disabled validation, with a clear test area, an operator at
-the emergency stop, and the official controller available, enable physical
-motion explicitly:
+Go2 odom과 VO를 같은 bag에서 비교하는 명령은
+[OPERATIONS의 비교 절](docs/OPERATIONS.md#go2-odom과-visual-odometry-비교)을 사용한다. 두 odometry
+사이 차이는 ground truth가 아니므로 절대 정확도로 해석하지 않는다.
+
+## DB와 안전 원칙
+
+- mapping의 `reset_db` 기본값은 `false`다.
+- `reset_db:=true`는 선택한 DB와 같은 이름의 SQLite sidecar를 지우므로 새 실험에서만
+  사용한다.
+- 세 모듈의 DB를 서로 바꿔 쓰지 않는다.
+- localization은 존재하는 DB의 절대 경로를 지정한다.
+- 비교 실험은 기존 active DB가 아닌 새 경로에서 시작한다.
+- 여러 SLAM 모듈을 동시에 실행해 같은 TF child frame을 중복 발행하지 않는다.
+
+## 검증
+
+현재 Python 테스트 기준:
 
 ```bash
-ros2 launch go2_nav2_bringup visual_navigation_mode.launch.py \
-  database_path:=maps/visual/active/rtabmap.db \
-  enable_motion:=true
+python3 -m pytest -q \
+  src/go2_rtabmap_bridge/test \
+  src/go2_rtabmap_launch/test \
+  src/go2_nav2_bringup/test \
+  src/go2_nav2_control/test
 ```
 
-Nav2 consumes `/rtabmap/map`, `/odom` and `/scan` generated from aligned depth.
-Its smoothed `/cmd_vel` is clamped and translated into Unitree Sport Move API
-`1008`; stale commands cause StopMove API `1003` after 0.30 seconds.
+2026-08-05 문서 정리 시점에는 76개 테스트가 통과했다. 이는 코드·launch·config 계약을
+검증한 결과이며 실기 지도 정확도나 모든 환경의 navigation 성공을 보장하지 않는다.
+보존 DB와 VO 비교 수치는 [VALIDATION](docs/VALIDATION.md)에 기록돼 있다.
 
-### 4. Map-Based Localization
+## 저장소 구조
 
-Localization reuses an existing RTAB-Map database:
-
-```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 launch go2_rtabmap_launch localization.launch.py \
-  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/active/rtabmap.db
+```text
+go2_lidar_slam/
+├── README.md
+├── dashboard/                     # 정적 UI와 Python backend
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── OPERATIONS.md
+│   ├── GO2_REFERENCE.md
+│   ├── VALIDATION.md
+│   ├── TROUBLESHOOTING.md
+│   ├── adr/                       # architecture decision records
+│   └── superpowers/               # 과거 계획·설계 기록
+├── maps/                          # 모듈별 RTAB-Map DB
+├── bags/                          # 비교 rosbag
+├── results/                       # 분석 JSON·CSV·plot
+└── src/
+    ├── go2_rtabmap_bridge/        # Go2 timestamp, odom, TF, cloud bridge
+    ├── go2_rtabmap_launch/        # 세 RTAB-Map 모듈 launch/config
+    ├── go2_nav2_bringup/          # Visual mapping/navigation 상위 모드
+    └── go2_nav2_control/          # Sport command와 LowState joint bridge
 ```
 
-If the robot starts far from the original mapping start pose, provide an initial pose:
+## Dashboard
+
+`dashboard/`에는 mapping/localization 제어용 browser UI와 Python backend가 있다.
 
 ```bash
-ros2 launch go2_rtabmap_launch localization.launch.py \
-  database_path:=/home/cvr/Desktop/sj/go2_lidar_slam/maps/active/rtabmap.db \
-  initial_pose:="0 0 0 0 0 0"
-```
-
-Verify localization:
-
-```bash
-ros2 topic hz /rtabmap/localization_pose
-ros2 topic echo /rtabmap/localization_pose --once
-ros2 node info /rtabmap/rtabmap
-```
-
-Current limitation: the LiDAR-only RTAB-Map configuration behaves best as a known-start localization baseline. Fully robust kidnapped/global relocalization is planned as a separate Scan Context + ICP PoC.
-
-### 5. Control Dashboard
-
-The dashboard provides a browser UI for mapping and localization control.
-
-<p>
-  <a href="https://leesj24601.github.io/lidar-vs-visual-slam/dashboard/">
-    <img src="https://img.shields.io/badge/Live_Dashboard-Open%20Site-16A34A?style=for-the-badge" alt="Open live dashboard" height="36">
-  </a>
-</p>
-
-Run the backend after sourcing ROS 2 and this workspace:
-
-```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
 python3 dashboard/server.py --host 127.0.0.1 --port 8080
 ```
 
-Open:
-
-```text
-http://127.0.0.1:8080
-```
-
-For static preview without ROS:
-
-```bash
-cd dashboard
-python3 -m http.server 8080
-```
-
-See [`dashboard/README.md`](dashboard/README.md) for API details.
-
-### 6. Diagnostics & Testing
-
-Build and test:
-
-```bash
-source /opt/ros/humble/setup.bash
-colcon build --symlink-install
-colcon test --event-handlers console_direct+
-```
-
-Check launch arguments:
-
-```bash
-ros2 launch go2_rtabmap_launch slam.launch.py --show-args
-ros2 launch go2_rtabmap_launch localization.launch.py --show-args
-```
-
-Basic diagnosis order:
-
-```bash
-ros2 topic hz /utlidar/robot_odom --no-daemon
-ros2 topic hz /utlidar/cloud_deskewed --no-daemon
-ros2 topic hz /odom
-ros2 topic hz /scan_cloud
-ros2 run tf2_ros tf2_echo odom base_link
-ros2 topic hz /rtabmap/mapData
-```
-
----
-
-## Reference Documents
-
-- [`SLAM_PLAN.md`](SLAM_PLAN.md): implementation plan and architecture details
-- [`STATUS.md`](STATUS.md): current progress, completed work, limitations, and verification notes
-- [`docs/RUNBOOK.md`](docs/RUNBOOK.md): repeatable build, mapping, localization, and troubleshooting workflow
-- [`docs/GO2_REFERENCE.md`](docs/GO2_REFERENCE.md): measured Go2 topics, QoS, TF, and timestamp behavior
-- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md): symptoms, root causes, fixes, and verification commands
-- [`docs/adr/001-slam-tool-selection.md`](docs/adr/001-slam-tool-selection.md): SLAM tool and bridge architecture decision
-
----
-
-## Acknowledgements
-
-- [ROS 2 Humble](https://docs.ros.org/en/humble/)
-- [RTAB-Map ROS](https://github.com/introlab/rtabmap_ros)
-- [Unitree Go2](https://www.unitree.com/go2)
-
----
+자세한 내용은 [dashboard README](dashboard/README.md)를 참고한다.
 
 ## License
 
-This project currently uses the MIT license in its ROS package manifests.
+ROS package manifest는 MIT license를 선언한다.
