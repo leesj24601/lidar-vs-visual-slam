@@ -15,8 +15,9 @@ VISUAL_LOCALIZATION_LAUNCH = (
 )
 VISUAL_CONFIG = PACKAGE_ROOT / 'config' / 'rtabmap_visual_real.yaml'
 PACKAGE_XML = PACKAGE_ROOT / 'package.xml'
-ARCHITECTURE_DOC = PACKAGE_ROOT.parents[1] / 'architecture.md'
-VISUAL_PLAN_DOC = PACKAGE_ROOT.parents[1] / 'VISUAL_SLAM_PLAN.md'
+DOCS_ROOT = PACKAGE_ROOT.parents[1] / 'docs'
+ARCHITECTURE_DOC = DOCS_ROOT / 'ARCHITECTURE.md'
+VALIDATION_DOC = DOCS_ROOT / 'VALIDATION.md'
 os.environ.setdefault('ROS_LOG_DIR', '/tmp/go2_rtabmap_launch_test_logs')
 
 
@@ -131,51 +132,30 @@ def test_visual_yaml_filters_high_and_isolated_depth_obstacles():
 def test_architecture_documents_visual_odom_refinement():
     text = ARCHITECTURE_DOC.read_text()
 
-    assert '## 겹침 현상 해결' in text
-    assert '2D→2D' in text
-    assert '3D→2D PnP' in text
-    assert '1 Hz → 5 Hz → 8 Hz' in text
+    assert '## 모듈 B: Go2 odom 기반 Visual SLAM' in text
+    assert '3D-to-2D PnP' in text
     assert '`Kp/DetectorStrategy` | `8`' in text
     assert '`Vis/FeatureType` | `8`' in text
-    assert 'spatial proximity' in text
-    assert '큰 이중상' in text
-    assert '경계 번짐' in text
     assert '/utlidar/robot_odom' in text
-    assert 'RGBD/NeighborLinkRefining=true' in text
-    assert 'RGBD/ProximityBySpace=true' in text
-    assert 'RGBD/ProximityOdomGuess=false' in text
-    assert 'Vis/EstimationType=1' in text
-    assert '3D→2D PnP' in text
-    assert 'Rtabmap/DetectionRate=8.0' in text
-    assert '5 Hz → 8 Hz' in text
-    assert '### 8 Hz 전체 루프 검증' in text
-    assert '실효 처리율 **7.43 Hz**' in text
-    assert '194개 inlier' in text
-    assert '최종 채택한 기본값' in text
     assert 'sensor_time_offset_sec=-0.015' in text
+    assert '`RGBD/NeighborLinkRefining` | `true`' in text
+    assert '`RGBD/ProximityBySpace` | `true`' in text
+    assert '`RGBD/ProximityOdomGuess` | `false`' in text
+    assert '`Rtabmap/DetectionRate` | `8.0`' in text
+
+
+def test_validation_documents_visual_mapping_evidence():
+    text = VALIDATION_DOC.read_text()
+
     assert '47.03초' in text
     assert '0.9926' in text
-    assert '아직 8 Hz의 개선 효과가 검증됐다는 뜻은 아니다' not in text
-    assert '1 Hz' in text
-    assert '30°' in text
-    assert 'yaw drift' in text
-    assert '61–83cm' in text
-    assert '16–27cm' in text
-    assert '통제 실험' in text
-
-
-def test_visual_plan_documents_current_mapping_defaults():
-    text = VISUAL_PLAN_DOC.read_text()
-
-    assert "approx_sync_max_interval: 0.03" in text
-    assert "Kp/DetectorStrategy: '8'" in text
-    assert "Vis/FeatureType: '8'" in text
-    assert "Vis/EstimationType: '1'" in text
-    assert "RGBD/NeighborLinkRefining: 'true'" in text
-    assert "RGBD/ProximityBySpace: 'true'" in text
-    assert "Rtabmap/DetectionRate: '8.0'" in text
-    assert 'mapping `8.0`, localization `2.0`' in text
-    assert 'mapping보다 높은 `2.0`' not in text
+    assert '1 Hz → 5 Hz → 8 Hz' in text
+    assert '회전이 30° 이상인 세 구간' in text
+    assert '실효 처리율 **7.43 Hz**' in text
+    assert '**194개 inlier**' in text
+    assert '**61–83 cm / 7.9–11.9°**' in text
+    assert '**16–27 cm / 1.0–2.6°**' in text
+    assert 'ground truth가 아니므로' in text
 
 
 def test_visual_localization_requires_existing_database_without_deleting_it():
