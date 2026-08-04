@@ -53,5 +53,6 @@ def test_package_exports_lowstate_joint_state_bridge():
     package_text = (PACKAGE_ROOT / 'package.xml').read_text()
 
     assert 'lowstate_joint_state_bridge = ' in setup_text
+    assert "tests_require=['pytest']" in setup_text
     assert '<exec_depend>sensor_msgs</exec_depend>' in package_text
     assert '<exec_depend>unitree_go</exec_depend>' in package_text

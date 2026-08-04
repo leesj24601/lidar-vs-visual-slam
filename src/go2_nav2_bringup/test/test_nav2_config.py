@@ -83,6 +83,12 @@ def test_bringup_declares_mppi_runtime_dependency():
     assert '<exec_depend>nav2_mppi_controller</exec_depend>' in package_text
 
 
+def test_bringup_registers_pytest_with_colcon():
+    setup_text = (CONFIG_PATH.parents[1] / 'setup.py').read_text()
+
+    assert "tests_require=['pytest']" in setup_text
+
+
 def test_costmap_footprint_encloses_go2_body_with_margin():
     config = yaml.safe_load(CONFIG_PATH.read_text())
     global_costmap = _parameters(config, 'global_costmap', 'global_costmap')
