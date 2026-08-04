@@ -158,13 +158,20 @@ ros2 topic info /utlidar/cloud_deskewed --verbose --no-daemon
    source install/setup.bash
    ```
 
-5. **Optional: source the Go2 movement-control workspace**:
+5. **Source the Unitree support workspace before this workspace**:
 
-   Source this only when you need Go2 motion control in addition to SLAM.
+   The Nav2 Sport bridge and live RobotModel use `unitree_api`, `unitree_go`
+   and `go2_description` from `go2_ws`. Source in this exact order when
+   building or running the visual navigation mode:
 
    ```bash
+   source /opt/ros/humble/setup.bash
    source /home/cvr/Desktop/sj/go2_ws/install/setup.bash
+   source /home/cvr/Desktop/sj/go2_lidar_slam/install/setup.bash
    ```
+
+   Do not start the combined `go2_driver` or `go2_bringup`; this project uses
+   only their installed message definitions and robot description assets.
 
 ---
 
@@ -187,6 +194,8 @@ go2_lidar_slam/
 │   ├── backups/                        # Backed-up active DBs
 │   └── sessions/                       # Session-specific RTAB-Map DBs
 └── src/
+    ├── go2_nav2_bringup/               # Visual mapping/localization + Nav2 modes
+    ├── go2_nav2_control/               # Sport command and LowState joint bridges
     ├── go2_rtabmap_bridge/             # Go2 sensor bridge package
     └── go2_rtabmap_launch/             # RTAB-Map launch/config package
 ```
@@ -310,6 +319,69 @@ The 2D map is generated alongside graph/RGB-D mapping. It is not a simple
 projection of the final visualized 3D cloud: local ray tracing records both
 occupied endpoints and the free space observed between the camera and those
 endpoints.
+
+#### Explicit Visual Mapping and Navigation Modes
+
+For the Go2-internal-odometry visual path, use the two top-level modes below.
+Both assume that the RealSense aligned color/depth topics are already running.
+
+Mapping mode is driven with the official Unitree controller. It starts neither
+Nav2 nor the PC Sport-command bridge:
+
+```bash
+source /opt/ros/humble/setup.bash
+source /home/cvr/Desktop/sj/go2_ws/install/setup.bash
+source install/setup.bash
+
+ros2 launch go2_nav2_bringup visual_mapping_mode.launch.py \
+  database_path:=maps/visual/active/rtabmap.db \
+  reset_db:=true
+```
+
+Navigation mode opens that visual RTAB-Map database with incremental mapping
+disabled. RTAB-Map remains the localization source and publishes `map -> odom`;
+AMCL and `nav2_map_server` are not launched. The default below leaves the Sport
+bridge disabled, starts RViz, and displays the live Go2 URDF pose from
+`/lowstate`. It is suitable for checking localization, TF, costmaps and
+planning without moving Go2:
+
+```bash
+ros2 launch go2_nav2_bringup visual_navigation_mode.launch.py \
+  database_path:=maps/visual/active/rtabmap.db \
+  enable_motion:=false \
+  rviz:=true \
+  show_robot_model:=true \
+  lowstate_topic:=/lowstate
+```
+
+The read-only `lowstate_joint_state_bridge` converts the first 12 Go2 motor
+states to `/joint_states`. `robot_state_publisher` loads
+`go2_description.urdf`, whose root is `base_link` and which does not define an
+`odom` link. This preserves the existing `map -> odom -> base_link` ownership.
+Check the live model and localization chain with:
+
+```bash
+ros2 topic hz /joint_states
+ros2 run tf2_ros tf2_echo base_link FL_hip
+ros2 run tf2_ros tf2_echo map base_link
+```
+
+Use `rviz:=false` when attaching a separately configured RViz instance, or
+`show_robot_model:=false` when only map and Nav2 processes are required.
+
+Only after a motion-disabled validation, with a clear test area, an operator at
+the emergency stop, and the official controller available, enable physical
+motion explicitly:
+
+```bash
+ros2 launch go2_nav2_bringup visual_navigation_mode.launch.py \
+  database_path:=maps/visual/active/rtabmap.db \
+  enable_motion:=true
+```
+
+Nav2 consumes `/rtabmap/map`, `/odom` and `/scan` generated from aligned depth.
+Its smoothed `/cmd_vel` is clamped and translated into Unitree Sport Move API
+`1008`; stale commands cause StopMove API `1003` after 0.30 seconds.
 
 ### 4. Map-Based Localization
 

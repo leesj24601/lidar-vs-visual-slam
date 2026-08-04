@@ -35,6 +35,14 @@ def test_nav2_uses_rtabmap_localization_map_and_realsense_scan():
     assert obstacle_layer['depth_scan']['topic'] == '/scan'
 
 
+def test_navfn_uses_astar_for_global_path_search():
+    config = yaml.safe_load(CONFIG_PATH.read_text())
+    planner = _parameters(config, 'planner_server')['GridBased']
+
+    assert planner['plugin'] == 'nav2_navfn_planner/NavfnPlanner'
+    assert planner['use_astar'] is True
+
+
 def test_nav2_uses_omnidirectional_mppi_with_go2_motion_limits():
     config = yaml.safe_load(CONFIG_PATH.read_text())
     controller_server = _parameters(config, 'controller_server')

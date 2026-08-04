@@ -46,6 +46,9 @@
     "Grid/RangeMax": "3.0"
     "Grid/DepthDecimation": "2"
     "Grid/CellSize": "0.05"
+    "Grid/MaxObstacleHeight": "0.20"
+    "Grid/NoiseFilteringRadius": "0.10"
+    "Grid/NoiseFilteringMinNeighbors": "5"
 
     # Keep the validated PnP neighbor and spatial-proximity graph settings.
     # The finalized 8 Hz rate (125 ms) passed the controlled 5-to-8 Hz and
