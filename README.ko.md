@@ -51,42 +51,53 @@
 <a id="architecture"></a>
 ## 🏛️ 시스템 아키텍처
 
-~~~mermaid
-flowchart TB
+README에서는 세 SLAM 경로를 나란히 놓고, 각 경로의 데이터 흐름을 위에서 아래로
+비교한다. 세부 topic 연결과 노드별 책임은 [시스템 아키텍처](docs/ARCHITECTURE.md)에서
+확인할 수 있다.
+
+```mermaid
+flowchart LR
     subgraph LIDAR["LiDAR SLAM"]
-        LO["/utlidar/robot_odom"] --> LB["LiDAR bridge"]
-        LC["/utlidar/cloud_deskewed"] --> LB
-        LB --> LOD["/odom + odom → base_link"]
-        LB --> LSCAN["/scan_cloud"]
-        LOD --> LR["RTAB-Map /rtabmap"]
-        LSCAN --> LR
-        LR --> LDB[("maps/active/rtabmap.db")]
+        direction TB
+        L1["Go2 odometry<br/>+ LiDAR cloud"]
+        L2["LiDAR bridge<br/>stamp · TF · cloud"]
+        L3["RTAB-Map<br/>ICP · map → odom"]
+        L4[("maps/active<br/>Mapping · Localization")]
+        L1 --> L2 --> L3 --> L4
     end
 
-    subgraph VISUAL["Go2 odometry 기반 Visual SLAM"]
-        VO["/utlidar/robot_odom"] --> VB["Go2 odom bridge"]
-        VB --> VOD["/odom + odom → base_link"]
-        RGB["RealSense color"] --> VS["rgbd_sync"]
-        DEPTH["aligned depth + CameraInfo"] --> VS
-        VS --> VRGBD["/camera/rgbd_image"]
-        VOD --> VR["RTAB-Map /rtabmap"]
-        VRGBD --> VR
-        VR --> VDB[("maps/visual/active/rtabmap.db")]
-        VR --> NAV["Localization + Nav2"]
+    subgraph VISUAL["Go2 odometry Visual SLAM"]
+        direction TB
+        V1["Go2 odometry<br/>+ RealSense RGB-D"]
+        V2["odom_tf_bridge<br/>+ rgbd_sync"]
+        V3["RTAB-Map<br/>PnP · map → odom"]
+        V4[("maps/visual/active<br/>Mapping · Localization · Nav2")]
+        V1 --> V2 --> V3 --> V4
     end
 
-    subgraph PURE["순수 Visual SLAM"]
-        PRGB["RealSense color"] --> PS["rgbd_sync"]
-        PDEPTH["aligned depth + CameraInfo"] --> PS
-        PS --> PODOM["rgbd_odometry"]
-        PODOM --> POV["/odom/vo + vo_odom → base_link"]
-        PS --> PR["RTAB-Map /rtabmap_vo"]
-        POV --> PR
-        PODOM --> PINFO["/vo_slam/odom_info"]
-        PINFO --> PR
-        PR --> PDB[("maps/visual_vo/active/rtabmap.db")]
+    subgraph PURE["Pure Visual SLAM"]
+        direction TB
+        P1["RealSense RGB-D"]
+        P2["rgbd_sync<br/>+ rgbd_odometry"]
+        P3["RTAB-Map /rtabmap_vo<br/>map → vo_odom"]
+        P4[("maps/visual_vo/active<br/>Mapping · odometry 비교")]
+        P1 --> P2 --> P3 --> P4
     end
-~~~
+
+    LIDAR ~~~ VISUAL
+    VISUAL ~~~ PURE
+
+    classDef base fill:#ffffff,stroke:#64748b,color:#0f172a,stroke-width:1px
+    classDef slam fill:#e8eef5,stroke:#1e3a5f,color:#0f172a,stroke-width:1.5px
+    classDef database fill:#f1f5f9,stroke:#475569,color:#0f172a,stroke-width:1px
+    class L1,L2,V1,V2,P1,P2 base
+    class L3,V3,P3 slam
+    class L4,V4,P4 database
+
+    style LIDAR fill:#f8fafc,stroke:#cbd5e1,color:#0f172a,stroke-width:1px
+    style VISUAL fill:#f8fafc,stroke:#cbd5e1,color:#0f172a,stroke-width:1px
+    style PURE fill:#f8fafc,stroke:#cbd5e1,color:#0f172a,stroke-width:1px
+```
 
 | 모듈 | odometry | RTAB-Map 입력 | 지역 TF | 기본 DB | 현재 지원 범위 |
 |---|---|---|---|---|---|
