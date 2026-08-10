@@ -15,6 +15,7 @@ import yaml
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 VO_CONFIG = PACKAGE_ROOT / 'config' / 'rgbd_odometry_vo.yaml'
 RTABMAP_CONFIG = PACKAGE_ROOT / 'config' / 'rtabmap_visual_vo.yaml'
+VISUAL_GUI_CONFIG = PACKAGE_ROOT / 'config' / 'rtabmap_visual_gui.ini'
 VO_SLAM_LAUNCH = PACKAGE_ROOT / 'launch' / 'vo_visual_slam.launch.py'
 
 
@@ -70,7 +71,7 @@ def _resolved_arguments(node, context):
             context,
             normalize_to_list_of_substitutions(argument),
         )
-        for argument in node._Node__arguments
+        for argument in node._Node__arguments or []
     ]
 
 
@@ -142,6 +143,18 @@ def test_launch_starts_only_the_vo_visual_slam_stack():
         == '/rtabmap_vo'
     )
     assert nodes['rtabmap_viz'].condition is not None
+
+
+def test_vo_visual_slam_uses_project_rtabmap_viz_config():
+    module = _load_launch_module()
+    description = module.generate_launch_description()
+    context = _launch_context(description)
+    nodes = _nodes_by_name(description)
+
+    assert _resolved_arguments(nodes['rtabmap_viz'], context) == [
+        '-d',
+        str(VISUAL_GUI_CONFIG),
+    ]
 
 
 def test_vo_owns_odometry_tf_and_rtabmap_subscribes_to_its_topics():

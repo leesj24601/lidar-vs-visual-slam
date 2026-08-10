@@ -1,9 +1,7 @@
 # 검증 결과와 실험 근거
 
 이 문서는 현재 설정을 채택한 근거와 저장소에 남아 있는 검증 결과를 한곳에 모은다.
-구조와 데이터 흐름은 [ARCHITECTURE](ARCHITECTURE.md), 실행 명령은
-[OPERATIONS](OPERATIONS.md), 장애 진단은 [TROUBLESHOOTING](TROUBLESHOOTING.md)을
-참고한다.
+구조와 데이터 흐름은 [시스템 아키텍처](ARCHITECTURE.md)를 참고한다.
 
 ## 근거를 읽는 방법
 
@@ -15,6 +13,9 @@
 | B: 보존 산출물 | 저장된 DB, rosbag, JSON 분석 결과 | `maps/`, `bags/`, `results/` |
 | C: 기존 관측 기록 | 당시 실기 실행에서 기록했지만 원본 전체를 다시 계산하지 않은 수치 | 이전 아키텍처·상태 문서의 실험 메모 |
 | D: 미검증 | 코드에는 경로가 있지만 실기 완료 근거가 충분하지 않은 기능 | 순수 Visual localization |
+
+대용량 DB와 rosbag 원본은 공개 저장소에 포함하지 않는다. 공개 저장소에서는
+`results/`의 요약 결과와 이 문서에 기록한 통계를 근거로 제공한다.
 
 등급 B와 C의 수치는 특정 주행 환경에서 얻은 결과다. 반복성이나 절대 정확도를 보장하는
 벤치마크가 아니며, 서로 다른 실험의 수치를 한 실험처럼 직접 비교하면 안 된다.
@@ -176,6 +177,13 @@ neighbor 잔차 p95가 4.24 cm / 1.45°에서 0.88 cm / 0.26°로 줄었다. 이
 기본값으로 채택하지 않았다. camera extrinsic은 현재 운용값일 뿐 정밀 calibration을
 완료한 값은 아니다.
 
+### Nav2 목표점 주행 공개 영상 — C
+
+[Go2 Nav2 목표점 주행 실기 영상](https://youtu.be/n31tp01uUzw)은 Go2 odometry 기반
+Visual 경로에서 Nav2 목표점 주행을 수행한 당시의 공개 관측 기록이다. 이 영상은 해당
+구성의 실기 동작 여부를 확인하는 근거로 사용하며, 반복 성공률이나 지도·궤적의 정량
+정확도를 입증하는 자료로 해석하지 않는다.
+
 ## 순수 Visual SLAM과 VO 비교
 
 ### 구현·산출물 범위 — A·B·D
@@ -261,8 +269,8 @@ truth가 필요하다.
 
 ## 다시 검증하는 방법
 
-정확한 launch와 bag 분석 명령은 [OPERATIONS](OPERATIONS.md)의 각 모듈 실행 절차와
-“VO와 Go2 odom 비교” 절을 따른다. 새 실험에서는 최소한 다음 정보를 함께 보존한다.
+새 실험은 [README 빠른 시작](../README.ko.md#quick-start)의 launch 명령을 기준으로
+실행하고 최소한 다음 정보를 함께 보존한다.
 
 1. 사용한 commit과 launch 인자
 2. 카메라 해상도·FPS·exposure와 장착 extrinsic

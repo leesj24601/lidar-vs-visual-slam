@@ -54,6 +54,9 @@ def generate_launch_description():
     rtabmap_config_path = str(
         package_share / 'config' / 'rtabmap_visual_vo.yaml'
     )
+    gui_config_path = str(
+        package_share / 'config' / 'rtabmap_visual_gui.ini'
+    )
 
     rgb_topic = LaunchConfiguration('rgb_topic')
     depth_topic = LaunchConfiguration('depth_topic')
@@ -236,6 +239,7 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             condition=IfCondition(LaunchConfiguration('rtabmap_viz')),
+            arguments=['-d', gui_config_path],
             parameters=[
                 rtabmap_config_path,
                 {

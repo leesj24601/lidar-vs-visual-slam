@@ -1,11 +1,26 @@
-build/
-install/
-log/
+# ROS 2 / colcon
+/build/
+/install/
+/log/
 
+# Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
-maps/
-maps/active/
-maps/sessions/
-.omx/
+# Runtime data
+/maps/
+/bags/
+/.omx/
+
+# Browser automation artifacts
+/.playwright-cli/
+/.playwright-mcp/
+
+# Local agent instructions
+/AGENTS.md
+
+# Public documentation allowlist
+/docs/*
+!/docs/ARCHITECTURE.md
+!/docs/VALIDATION.md

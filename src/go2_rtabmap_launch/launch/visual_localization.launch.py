@@ -30,10 +30,16 @@ def _validate_database(context):
 
 
 def generate_launch_description():
+    package_share = Path(get_package_share_directory('go2_rtabmap_launch'))
     config_path = str(
-        Path(get_package_share_directory('go2_rtabmap_launch'))
+        package_share
         / 'config'
         / 'rtabmap_visual_real.yaml'
+    )
+    gui_config_path = str(
+        package_share
+        / 'config'
+        / 'rtabmap_visual_gui.ini'
     )
     rgb_topic = LaunchConfiguration('rgb_topic')
     depth_topic = LaunchConfiguration('depth_topic')
@@ -260,6 +266,7 @@ def generate_launch_description():
             output='screen',
             emulate_tty=True,
             condition=IfCondition(LaunchConfiguration('rtabmap_viz')),
+            arguments=['-d', gui_config_path],
             parameters=[
                 config_path,
                 {

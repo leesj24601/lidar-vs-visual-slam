@@ -1,10 +1,15 @@
+import configparser
 import importlib.util
 import os
 from pathlib import Path
 
 from launch import LaunchContext
-from launch.utilities import perform_substitutions
+from launch.utilities import (
+    normalize_to_list_of_substitutions,
+    perform_substitutions,
+)
 from launch_ros.actions import Node
+import setuptools
 import yaml
 
 
@@ -14,6 +19,8 @@ VISUAL_LOCALIZATION_LAUNCH = (
     PACKAGE_ROOT / 'launch' / 'visual_localization.launch.py'
 )
 VISUAL_CONFIG = PACKAGE_ROOT / 'config' / 'rtabmap_visual_real.yaml'
+VISUAL_GUI_CONFIG = PACKAGE_ROOT / 'config' / 'rtabmap_visual_gui.ini'
+SETUP_PY = PACKAGE_ROOT / 'setup.py'
 PACKAGE_XML = PACKAGE_ROOT / 'package.xml'
 DOCS_ROOT = PACKAGE_ROOT.parents[1] / 'docs'
 ARCHITECTURE_DOC = DOCS_ROOT / 'ARCHITECTURE.md'
@@ -30,6 +37,56 @@ def _load_launch(path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _rtabmap_viz_arguments(path, monkeypatch):
+    module = _load_launch(path)
+    monkeypatch.setattr(
+        module,
+        'get_package_share_directory',
+        lambda package: str(PACKAGE_ROOT),
+    )
+    description = module.generate_launch_description()
+    node = next(
+        entity
+        for entity in description.entities
+        if isinstance(entity, Node)
+        and entity._Node__package == 'rtabmap_viz'
+        and entity._Node__node_executable == 'rtabmap_viz'
+    )
+    context = LaunchContext()
+    return [
+        perform_substitutions(
+            context,
+            normalize_to_list_of_substitutions(argument),
+        )
+        for argument in node._Node__arguments or []
+    ]
+
+
+def _setup_data_files(monkeypatch):
+    captured = {}
+    monkeypatch.chdir(PACKAGE_ROOT)
+    monkeypatch.setattr(
+        setuptools,
+        'setup',
+        lambda **kwargs: captured.update(kwargs),
+    )
+    spec = importlib.util.spec_from_file_location('go2_rtabmap_setup', SETUP_PY)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return captured['data_files']
+
+
+def _gui_settings():
+    assert VISUAL_GUI_CONFIG.is_file()
+    text = VISUAL_GUI_CONFIG.read_text()
+    assert '[Gui]' in text.splitlines()
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str
+    parser.read_string(text)
+    assert parser.has_section('Gui')
+    return parser['Gui']
 
 
 def _visual_localization_rtabmap_parameters(monkeypatch):
@@ -89,6 +146,38 @@ def test_visual_slam_launch_defaults_use_rgbd_sync_and_go2_odom_bridge():
     assert "'Rtabmap/DetectionRate': rtabmap_detection_rate_param" in text
     assert "DEFAULT_DATABASE_PATH = 'maps/visual/active/rtabmap.db'" in text
     assert 'default_value=DEFAULT_DATABASE_PATH' in text
+
+
+def test_visual_launches_use_project_rtabmap_viz_config(monkeypatch):
+    expected = ['-d', str(VISUAL_GUI_CONFIG)]
+
+    assert _rtabmap_viz_arguments(VISUAL_SLAM_LAUNCH, monkeypatch) == expected
+    assert (
+        _rtabmap_viz_arguments(VISUAL_LOCALIZATION_LAUNCH, monkeypatch)
+        == expected
+    )
+
+
+def test_visual_gui_config_pins_clean_map_cloud_rendering():
+    settings = _gui_settings()
+
+    assert settings['General\\decimation0'] == '4'
+    assert settings['General\\maxDepth0'] == '3'
+    assert settings['General\\cloudVoxel'] == '0.01'
+    assert settings['General\\cloudNoiseRadius'] == '0.05'
+    assert settings['General\\cloudNoiseMinNeighbors'] == '5'
+    assert settings['General\\ptSize0'] == '3'
+
+
+def test_package_installs_visual_gui_config(monkeypatch):
+    data_files = _setup_data_files(monkeypatch)
+    config_files = next(
+        files
+        for destination, files in data_files
+        if destination.endswith('/config')
+    )
+
+    assert str(VISUAL_GUI_CONFIG.relative_to(PACKAGE_ROOT)) in config_files
 
 
 def test_visual_yaml_uses_rgbd_visual_mapping_defaults():

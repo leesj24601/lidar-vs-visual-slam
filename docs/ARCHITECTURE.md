@@ -1,9 +1,7 @@
 # 시스템 아키텍처와 설계 결정
 
-이 문서는 현재 코드가 제공하는 세 SLAM 모듈의 구조와 차이를 설명한다. 실행 방법은
-[OPERATIONS](OPERATIONS.md), 실험 근거는 [VALIDATION](VALIDATION.md), 센서 특성은
-[GO2_REFERENCE](GO2_REFERENCE.md), 장애 대응은
-[TROUBLESHOOTING](TROUBLESHOOTING.md)을 참고한다.
+이 문서는 현재 코드가 제공하는 세 SLAM 방식의 구조와 차이를 설명한다. 설정 채택
+근거와 실험 결과는 [검증 결과와 실험 근거](VALIDATION.md)를 참고한다.
 
 ## 세 모듈 한눈에 보기
 
